@@ -37,12 +37,14 @@
 - [x] Frontend TanStack Start SSR su porta 3000 funzionante
 - [x] Finnhub LIVE search (testato AAPL → CDR internazionali reali) 
 
-### Iterazione 2 — Feature additions
-- [x] **F6 NEWS panel** con 3 tab: MARKET (general/forex/crypto/merger), MY HOLDINGS (news per simboli in portafoglio), SYMBOL (input ticker per news mirate)
-- [x] **AI Sentiment Analysis**: bottone `✦ AI SENTIMENT` analizza fino a 12 headlines con Gemini 2.5 Flash, classifica BULLISH/BEARISH/NEUTRAL, formatta in italiano con **bold** key terms e BOTTOM LINE
-- [x] **Quote reali Finnhub** per stocks (verificato AAPL: 291.55 USD, day -1.38% — match con API diretta)
-- [x] **Watchlist persistente**: bottone `★ ADD TO WATCHLIST` in detail view → Supabase `watchlist` table
-- [x] **Profile route** `/_authenticated/profile` con tab Profilo/Portafogli/Watchlist/AI Chat (preserva auth middleware)
+### Iterazione 3 — Compliance regolamentare (MiFID II / SEC)
+- [x] **System prompt AI** riscritto con vincoli HARD: niente "buy/sell", riformulazione prescrittiva → descrittiva (es. "buy X" → "historically, allocations to X have shown..."), terminazione obbligatoria con BOTTOM LINE + DISCLAIMER
+- [x] **System prompt sentiment news** allineato (osservazioni statistiche, non raccomandazioni)
+- [x] **Messaggio benvenuto AI Advisor** riscritto come "analisi educativa", esplicito "non fornisco raccomandazioni personalizzate"
+- [x] **DisclaimerBar sticky** sopra bottom-nav su tutte le schermate del terminale (giallo, FULL TERMS link)
+- [x] **DisclaimerModal first-visit** con localStorage `moneta_disclaimer_v1` — bottoni ACCETTO E CONTINUO / LEGGI TUTTO
+- [x] **Pagina `/disclaimer`** con 8 sezioni legali in italiano: Natura del Servizio, Assenza di Consulenza Finanziaria, Rischi, Limitazione di Responsabilità, Dati/Cookie, AI Generativa, Consulente Abilitato, Giurisdizione — cita MiFID II, TUF, Reg. UE 2017/565, Securities Act 1933, Securities Exchange Act 1934, OCF, CONSOB
+- [x] **Test compliance**: curl con prompt provocatorio "Devo comprare AAPL? Dammi raccomandazione personalizzata" → AI rifiuta esplicitamente e risponde solo con framework educativo + BOTTOM LINE + DISCLAIMER ✅
 
 ### Verifica E2E (screenshot)
 - ✅ Homepage F1 (NO ACTIVE PORTFOLIO + 5 shortcut F2-F6)
