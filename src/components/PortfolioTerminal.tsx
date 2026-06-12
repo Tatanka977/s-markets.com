@@ -186,34 +186,34 @@ function TopBar({time}:any) {
 
 function FKeyBar({page,setPage}:any) {
   const keys=[
-    {n:"F1",l:"HOME",    id:"home"},
-    {n:"F2",l:"SEARCH",  id:"search"},
-    {n:"F3",l:"PORT",    id:"portfolio"},
-    {n:"F4",l:"ANALYSIS",id:"analysis"},
-    {n:"F5",l:"AI ADVSR",id:"ai"},
-    {n:"F6",l:"NEWS",    id:"news"},
+    {l:"HOME",    id:"home"},
+    {l:"SEARCH",  id:"search"},
+    {l:"PORT",    id:"portfolio"},
+    {l:"ANALYSIS",id:"analysis"},
+    {l:"AI ADVSR",id:"ai"},
+    {l:"NEWS",    id:"news"},
   ];
   return (
     <div style={{background:B.panel2,borderBottom:`1px solid ${B.border}`,
       display:"flex",alignItems:"stretch",padding:"3px 4px",gap:3,flexShrink:0}}>
       {keys.map(k=>(
-        <FKey key={k.id} num={k.n} label={k.l} active={page===k.id} onClick={()=>setPage(k.id)}/>
+        <FKey key={k.id} label={k.l} active={page===k.id} onClick={()=>setPage(k.id)}/>
       ))}
       <div style={{flex:1}}/>
       <span style={{fontSize:24,color:B.gray3,fontFamily:"'Courier New',monospace",
-        alignSelf:"center",paddingRight:4}}>F9=HELP</span>
+        alignSelf:"center",paddingRight:4}}>HELP</span>
     </div>
   );
 }
 
 function BottomNav({page,setPage,badge}:any) {
   const tabs=[
-    {id:"home",    fn:"F1",label:"HOME"},
-    {id:"search",  fn:"F2",label:"SRCH"},
-    {id:"portfolio",fn:"F3",label:"PORT",badge},
-    {id:"analysis",fn:"F4",label:"ANLY"},
-    {id:"ai",      fn:"F5",label:"AI"},
-    {id:"news",    fn:"F6",label:"NEWS"},
+    {id:"home",     label:"HOME"},
+    {id:"search",   label:"SEARCH"},
+    {id:"portfolio",label:"PORTFOLIO",badge},
+    {id:"analysis", label:"ANALYSIS"},
+    {id:"ai",       label:"AI"},
+    {id:"news",     label:"NEWS"},
   ];
   return (
     <div style={{background:B.panel2,borderTop:`1px solid ${B.borderB}`,
@@ -223,13 +223,12 @@ function BottomNav({page,setPage,badge}:any) {
         return (
           <button key={t.id} onClick={()=>setPage(t.id)} style={{
             flex:1,background:"none",border:"none",cursor:"pointer",
-            padding:"6px 0 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:1,
+            padding:"8px 0 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:1,
             borderTop:`2px solid ${active?B.blue:"transparent"}`,position:"relative"}}>
             {t.badge>0&&<div style={{position:"absolute",top:3,right:"18%",
               background:B.blue,color:B.white,fontSize:24,fontWeight:700,
               fontFamily:"'Courier New',monospace",padding:"0 5px",lineHeight:"16px"}}>{t.badge}</div>}
-            <span style={{fontSize:24,color:active?B.blue:B.gray3,fontFamily:"'Courier New',monospace"}}>{t.fn}</span>
-            <span style={{fontSize:32,color:active?B.blue:B.gray2,fontWeight:700,
+            <span style={{fontSize:24,color:active?B.blue:B.gray2,fontWeight:700,
               fontFamily:"'Courier New',monospace",letterSpacing:"0.06em"}}>{t.label}</span>
           </button>
         );
@@ -264,7 +263,7 @@ function HomePage({holdings,setPage,onRefresh,refreshing}:any) {
             <div style={{padding:"12px 0",textAlign:"center"}}>
               <div style={{fontSize:18,color:B.gray2,fontFamily:"'Courier New',monospace",marginBottom:8}}>NO ACTIVE PORTFOLIO</div>
               <div style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:12}}>
-                USE F2/SRCH  SEARCH SECURITIES BY ISIN OR TICKER
+                USE SEARCH TO FIND SECURITIES BY ISIN OR TICKER
               </div>
               <button onClick={()=>setPage("search")} style={{
                 background:B.blue,border:"none",color:B.white,
@@ -344,17 +343,16 @@ function HomePage({holdings,setPage,onRefresh,refreshing}:any) {
       <div style={{padding:"4px",background:B.panel2,marginTop:1,
         display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}}>
         {[
-          {l:"SEARCH SECUR",f:"F2",action:()=>setPage("search")},
-          {l:"PORTFOLIO",   f:"F3",action:()=>setPage("portfolio")},
-          {l:"RISK ANALYSIS",f:"F4",action:()=>setPage("analysis")},
-          {l:"AI ADVISOR",  f:"F5",action:()=>setPage("ai")},
-          {l:"MARKET NEWS", f:"F6",action:()=>setPage("news")},
+          {l:"SEARCH SECURITIES",action:()=>setPage("search")},
+          {l:"PORTFOLIO",         action:()=>setPage("portfolio")},
+          {l:"RISK ANALYSIS",     action:()=>setPage("analysis")},
+          {l:"AI ADVISOR",        action:()=>setPage("ai")},
+          {l:"MARKET NEWS",       action:()=>setPage("news")},
         ].map((b,i)=>(
           <button key={i} onClick={b.action} style={{
             background:B.panel2,border:`1px solid ${B.border}`,
-            padding:"6px 8px",cursor:"pointer",textAlign:"left",
+            padding:"8px 10px",cursor:"pointer",textAlign:"left",
             display:"flex",alignItems:"center",gap:6,fontFamily:"'Courier New',monospace"}}>
-            <span style={{fontSize:14,color:B.blue,fontWeight:700}}>{b.f}</span>
             <span style={{fontSize:15,color:B.gray1,textTransform:"uppercase",letterSpacing:"0.05em"}}>{b.l}</span>
             <span style={{marginLeft:"auto",fontSize:15,color:B.gray3}}>{">"}</span>
           </button>
@@ -576,7 +574,7 @@ function PortfolioPage({holdings,onRemove}:any) {
   if (!holdings.length) return (
     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
       <div style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center",lineHeight:1.8}}>
-        NO SECURITIES IN PORTFOLIO<br/>USE F2 SEARCH TO ADD LIVE POSITIONS
+        NO SECURITIES IN PORTFOLIO<br/>USE SEARCH TO ADD LIVE POSITIONS
       </div>
     </div>
   );
@@ -665,7 +663,7 @@ function AnalysisPage({holdings}:any) {
   const [sub,setSub]=useState("alloc");
   if (!holdings.length) return (
     <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <span style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace"}}>NO DATA — ADD SECURITIES VIA F2</span>
+      <span style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace"}}>NO DATA — ADD SECURITIES VIA SEARCH</span>
     </div>
   );
   const sD=groupBy(holdings,"sector",m.total);
@@ -1108,7 +1106,7 @@ Max 180 words. Respond in ENGLISH.`;
         {!loading && list.length === 0 && (
           <div style={{padding:"14px 10px",fontSize:14,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center"}}>
             {tab === "symbol" ? "ENTER A TICKER ABOVE TO LOAD COMPANY NEWS" :
-             tab === "holdings" ? "NO HOLDINGS YET — ADD SECURITIES VIA F2" :
+             tab === "holdings" ? "NO HOLDINGS YET — ADD SECURITIES VIA SEARCH" :
              "NO NEWS AVAILABLE"}
           </div>
         )}
