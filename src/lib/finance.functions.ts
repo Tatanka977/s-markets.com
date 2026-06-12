@@ -226,22 +226,43 @@ function findMock(sym: string): Quote {
   };
 }
 
+function hasFinnhub(): boolean {
+  return !!process.env.FINNHUB_API_KEY;
+}
+
+// Map mock universe categories to be useful for filtering Finnhub search results
+function inferCategoryFromType(t: string): Category | undefined {
+  const u = (t || "").toUpperCase();
+  if (u.includes("ETF")) return "ETF";
+  if (u.includes("BOND")) return "BOND";
+  if (u.includes("REIT")) return "REIT";
+  if (u.includes("COMMODITY")) return "COMMODITY";
+  if (u.includes("CRYPTO")) return "CRYPTO";
+  if (u.includes("FX") || u.includes("FOREX")) return "FX";
+  if (u.includes("COMMON") || u.includes("EQUITY") || u.includes("STOCK")) return "STOCK";
+  return "STOCK";
+}
+
 export const searchSecurities = createServerFn({ method: "GET" })
   .inputValidator((d: { q: string; category?: Category }) => d)
   .handler(async ({ data }) => {
-    const q = (data.q || "").trim().toLowerCase();
+    const q = (data.q || "").trim();
     const cat = data.category;
-    let pool = MOCK_UNIVERSE;
-    if (cat) pool = pool.filter((m) => m.category === cat);
-    const matches = q
-      ? pool.filter(
+
+    // Always include mock matches (multi-asset coverage Finnhub free tier doesn't have)
+    const ql = q.toLowerCase();
+    let mockPool = MOCK_UNIVERSE;
+    if (cat) mockPool = mockPool.filter((m) => m.category === cat);
+    const mockMatches = ql
+      ? mockPool.filter(
           (m) =>
-            m.symbol.toLowerCase().includes(q) ||
-            (m.ticker || "").toLowerCase().includes(q) ||
-            m.shortName.toLowerCase().includes(q)
+            m.symbol.toLowerCase().includes(ql) ||
+            (m.ticker || "").toLowerCase().includes(ql) ||
+            m.shortName.toLowerCase().includes(ql)
         )
-      : pool;
-    return matches.map((m) => ({
+      : mockPool;
+
+    const out: SearchResult[] = mockMatches.map((m) => ({
       symbol: m.symbol,
       shortName: m.shortName,
       exchange: m.exchange || "US",
@@ -250,13 +271,92 @@ export const searchSecurities = createServerFn({ method: "GET" })
       sector: m.industry,
       industry: m.industry,
       geo: m.geo,
-    })) as SearchResult[];
+    }));
+
+    // Augment with Finnhub /search (US stocks coverage) when available
+    if (q && hasFinnhub()) {
+      try {
+        const res = await fh<FhSearch>(`/search?q=${encodeURIComponent(q)}`);
+        const seen = new Set(out.map((o) => o.symbol.toUpperCase()));
+        for (const r of (res?.result || []).slice(0, 25)) {
+          const sym = (r.symbol || "").toUpperCase();
+          if (!sym || seen.has(sym)) continue;
+          const inferred = inferCategoryFromType(r.type);
+          if (cat && inferred !== cat) continue;
+          seen.add(sym);
+          out.push({
+            symbol: sym,
+            shortName: r.description || sym,
+            exchange: r.displaySymbol?.includes(":") ? r.displaySymbol.split(":")[0] : "US",
+            type: r.type || "Equity",
+            category: inferred,
+          });
+        }
+      } catch (e) {
+        console.warn("[Finnhub search] falling back to mock:", (e as Error).message);
+      }
+    }
+
+    return out;
   });
 
 export const fetchQuote = createServerFn({ method: "GET" })
   .inputValidator((d: { symbol: string }) => d)
-  .handler(async ({ data }) => findMock(data.symbol));
+  .handler(async ({ data }) => {
+    const sym = (data.symbol || "").trim().toUpperCase();
+    // Non-equity assets stay on mock (Finnhub free tier lacks crypto/FX/bonds)
+    const mock = MOCK_UNIVERSE.find((q) => q.symbol === sym || q.ticker === sym);
+    if (mock && mock.category && ["CRYPTO", "FX", "BOND", "COMMODITY"].includes(mock.category)) {
+      return findMock(sym);
+    }
+    if (hasFinnhub()) {
+      try {
+        const q = await buildQuote(sym);
+        if (q.price != null) {
+          // Preserve mock category/industry hints if Finnhub doesn't supply them
+          if (mock) {
+            q.category = mock.category;
+            q.sector = q.sector || mock.industry;
+            q.industry = q.industry || mock.industry;
+            q.type = q.type || mock.type;
+          }
+          return q;
+        }
+      } catch (e) {
+        console.warn("[Finnhub quote] falling back to mock:", (e as Error).message);
+      }
+    }
+    return findMock(sym);
+  });
 
 export const batchRefresh = createServerFn({ method: "POST" })
   .inputValidator((d: { symbols: string[] }) => d)
-  .handler(async ({ data }) => data.symbols.map((s) => findMock(s)));
+  .handler(async ({ data }) => {
+    const results: Quote[] = [];
+    for (const s of data.symbols) {
+      const sym = (s || "").trim().toUpperCase();
+      const mock = MOCK_UNIVERSE.find((q) => q.symbol === sym || q.ticker === sym);
+      if (mock && mock.category && ["CRYPTO", "FX", "BOND", "COMMODITY"].includes(mock.category)) {
+        results.push(findMock(sym));
+        continue;
+      }
+      if (hasFinnhub()) {
+        try {
+          const q = await buildQuote(sym);
+          if (q.price != null) {
+            if (mock) {
+              q.category = mock.category;
+              q.sector = q.sector || mock.industry;
+              q.type = q.type || mock.type;
+            }
+            results.push(q);
+            continue;
+          }
+        } catch {
+          // ignore, fall back
+        }
+      }
+      results.push(findMock(sym));
+    }
+    return results;
+  });

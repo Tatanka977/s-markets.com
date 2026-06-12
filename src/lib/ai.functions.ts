@@ -8,17 +8,15 @@ interface ChatMessage {
 export const aiChat = createServerFn({ method: "POST" })
   .inputValidator((d: { messages: ChatMessage[]; system: string }) => d)
   .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("AI gateway not configured");
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const backendUrl = process.env.EMERGENT_BACKEND_URL || "http://localhost:8001";
+    const r = await fetch(`${backendUrl}/api/ai/chat`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "system", content: data.system }, ...data.messages],
+        messages: data.messages,
+        system: data.system,
+        provider: "gemini",
+        model: "gemini-2.5-flash",
       }),
     });
     if (!r.ok) {
@@ -26,6 +24,6 @@ export const aiChat = createServerFn({ method: "POST" })
       throw new Error(`AI ${r.status}: ${txt.slice(0, 200)}`);
     }
     const json = await r.json();
-    const reply: string = json?.choices?.[0]?.message?.content || "NO RESPONSE";
+    const reply: string = json?.reply || "NO RESPONSE";
     return { reply };
   });
