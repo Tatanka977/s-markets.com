@@ -985,19 +985,27 @@ function NewsPage({holdings,setPage}:any) {
     } finally { setLoading(false); }
   }, []);
 
+  // Stable key from symbols (does NOT change on price refresh) — prevents
+  // holdings news from reloading every minute when parent refreshes quotes.
+  const symbolsKey = useMemo(() => (
+    Array.from(new Set(
+      holdings.map((h:any) => h.asset.ticker || h.asset.symbol).filter(Boolean)
+    )).slice(0, 6).join("|")
+  ), [holdings]);
+
   const loadHoldings = useCallback(async () => {
-    if (!holdings.length) { setHoldNews([]); return; }
+    if (!symbolsKey) { setHoldNews([]); return; }
+    const symbols = symbolsKey.split("|");
     setLoading(true);
     try {
-      const symbols = Array.from(new Set(holdings.map(h => h.asset.ticker || h.asset.symbol).filter(Boolean))).slice(0, 6);
       const lists = await Promise.all(symbols.map(s => fetchCompanyNews(s, 14).catch(() => [])));
-      const merged = symbols.flatMap((s, i) => (lists[i] || []).slice(0, 6).map(n => ({...n, _sym: s})));
-      merged.sort((a, b) => (b.datetime || 0) - (a.datetime || 0));
+      const merged = symbols.flatMap((s:string, i:number) => (lists[i] || []).slice(0, 6).map((n:any) => ({...n, _sym: s})));
+      merged.sort((a:any, b:any) => (b.datetime || 0) - (a.datetime || 0));
       setHoldNews(merged.slice(0, 60));
     } catch (e:any) {
       console.error(e);
     } finally { setLoading(false); }
-  }, [holdings]);
+  }, [symbolsKey]);
 
   const daysForFetch = useMemo(() => {
     const map:any = {"24h":1,"3d":3,"7d":7,"14d":14,"30d":30,"all":30,"custom":30};
@@ -1258,14 +1266,28 @@ Max 180 words. Respond in ENGLISH.`;
           <span style={{color:B.yellow,fontWeight:700}}>{list.length}</span>
           {rawList.length !== list.length ? <span style={{color:B.gray3}}> / {rawList.length}</span> : ""} HEADLINES
         </span>
-        <button data-testid="news-ai-sentiment-btn" onClick={runSentiment} disabled={sentBusy || !list.length} style={{
-          background:"transparent", border:`1px solid ${B.cyan}`, color:B.cyan,
-          padding:"3px 10px", cursor:list.length?"pointer":"not-allowed",
-          fontFamily:"'Courier New',monospace", fontSize:14, fontWeight:700, letterSpacing:"0.06em",
-          opacity: list.length ? 1 : 0.4,
-        }}>
-          {sentBusy ? "ANALYZING..." : "✦ AI SENTIMENT"}
-        </button>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <button data-testid="news-refresh-btn" onClick={()=>{
+            if (tab === "market") loadMarket(marketCat);
+            else if (tab === "holdings") loadHoldings();
+            else if (tab === "symbol" && symActive) loadSymbol(symActive);
+          }} disabled={loading} style={{
+            background:"transparent", border:`1px solid ${B.gray3}`, color:B.gray1,
+            padding:"3px 10px", cursor:loading?"wait":"pointer",
+            fontFamily:"'Courier New',monospace", fontSize:14, fontWeight:700, letterSpacing:"0.06em",
+            opacity: loading ? 0.5 : 1,
+          }}>
+            {loading ? "..." : "↻ REFRESH"}
+          </button>
+          <button data-testid="news-ai-sentiment-btn" onClick={runSentiment} disabled={sentBusy || !list.length} style={{
+            background:"transparent", border:`1px solid ${B.cyan}`, color:B.cyan,
+            padding:"3px 10px", cursor:list.length?"pointer":"not-allowed",
+            fontFamily:"'Courier New',monospace", fontSize:14, fontWeight:700, letterSpacing:"0.06em",
+            opacity: list.length ? 1 : 0.4,
+          }}>
+            {sentBusy ? "ANALYZING..." : "✦ AI SENTIMENT"}
+          </button>
+        </div>
       </div>
 
       <div style={{flex:1,overflowY:"auto",paddingBottom:80}}>
