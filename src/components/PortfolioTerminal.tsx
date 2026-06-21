@@ -966,6 +966,15 @@ function NewsPage({holdings,setPage}:any) {
   const [sentiment, setSentiment] = useState("");
   const [sentBusy, setSentBusy] = useState(false);
 
+  // Filter state
+  const [keyword, setKeyword] = useState("");
+  const [dateRange, setDateRange] = useState<"24h"|"3d"|"7d"|"14d"|"30d"|"all"|"custom">("7d");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("ALL");
+  const [sortMode, setSortMode] = useState<"newest"|"oldest"|"relevance">("newest");
+  const [showFilters, setShowFilters] = useState(false);
+
   const loadMarket = useCallback(async (cat: string) => {
     setLoading(true);
     try {
@@ -981,31 +990,98 @@ function NewsPage({holdings,setPage}:any) {
     setLoading(true);
     try {
       const symbols = Array.from(new Set(holdings.map(h => h.asset.ticker || h.asset.symbol).filter(Boolean))).slice(0, 6);
-      const lists = await Promise.all(symbols.map(s => fetchCompanyNews(s, 7).catch(() => [])));
-      const merged = symbols.flatMap((s, i) => (lists[i] || []).slice(0, 4).map(n => ({...n, _sym: s})));
+      const lists = await Promise.all(symbols.map(s => fetchCompanyNews(s, 14).catch(() => [])));
+      const merged = symbols.flatMap((s, i) => (lists[i] || []).slice(0, 6).map(n => ({...n, _sym: s})));
       merged.sort((a, b) => (b.datetime || 0) - (a.datetime || 0));
-      setHoldNews(merged.slice(0, 30));
+      setHoldNews(merged.slice(0, 60));
     } catch (e:any) {
       console.error(e);
     } finally { setLoading(false); }
   }, [holdings]);
 
+  const daysForFetch = useMemo(() => {
+    const map:any = {"24h":1,"3d":3,"7d":7,"14d":14,"30d":30,"all":30,"custom":30};
+    return map[dateRange] || 14;
+  }, [dateRange]);
+
   const loadSymbol = useCallback(async (sym: string) => {
     if (!sym) return;
     setLoading(true); setSymActive(sym); setSentiment("");
     try {
-      const data = await fetchCompanyNews(sym, 14);
+      const data = await fetchCompanyNews(sym, daysForFetch);
       setSymNews(data || []);
     } catch (e:any) {
       console.error(e);
     } finally { setLoading(false); }
-  }, []);
+  }, [daysForFetch]);
 
   useEffect(() => { loadMarket(marketCat); }, [marketCat, loadMarket]);
   useEffect(() => { if (tab === "holdings") loadHoldings(); }, [tab, loadHoldings]);
 
+  // Re-fetch symbol news when date-range changes (so we ask Finnhub for the new window)
+  useEffect(() => {
+    if (tab === "symbol" && symActive) loadSymbol(symActive);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daysForFetch]);
+
+  const rawList = tab === "symbol" ? symNews : tab === "holdings" ? holdNews : marketNews;
+
+  // Compute date window (epoch seconds)
+  const dateWindow = useMemo(() => {
+    const now = Math.floor(Date.now()/1000);
+    const day = 86400;
+    if (dateRange === "custom") {
+      const f = customFrom ? Math.floor(new Date(customFrom).getTime()/1000) : 0;
+      const t = customTo ? Math.floor(new Date(customTo + "T23:59:59").getTime()/1000) : now;
+      return {from: f, to: t};
+    }
+    const span:any = {"24h":1,"3d":3,"7d":7,"14d":14,"30d":30,"all":3650};
+    return {from: now - (span[dateRange] || 7) * day, to: now};
+  }, [dateRange, customFrom, customTo]);
+
+  const allSources = useMemo(() => {
+    const set = new Set<string>();
+    rawList.forEach((n:any) => { if (n.source) set.add(String(n.source).toUpperCase()); });
+    return Array.from(set).sort();
+  }, [rawList]);
+
+  const filteredList = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    const kwTokens = kw ? kw.split(/\s+/).filter(Boolean) : [];
+
+    let res = rawList.filter((n:any) => {
+      // Date window
+      const ts = n.datetime || 0;
+      if (ts && (ts < dateWindow.from || ts > dateWindow.to)) return false;
+      // Source
+      if (sourceFilter !== "ALL" && String(n.source || "").toUpperCase() !== sourceFilter) return false;
+      // Keyword
+      if (kwTokens.length) {
+        const hay = ((n.headline || "") + " " + (n.summary || "") + " " + (n.source || "") + " " + (n._sym || "")).toLowerCase();
+        const hit = kwTokens.every(tok => hay.includes(tok));
+        if (!hit) return false;
+      }
+      return true;
+    });
+
+    if (sortMode === "newest") res = [...res].sort((a:any,b:any)=>(b.datetime||0)-(a.datetime||0));
+    else if (sortMode === "oldest") res = [...res].sort((a:any,b:any)=>(a.datetime||0)-(b.datetime||0));
+    else if (sortMode === "relevance" && kwTokens.length) {
+      res = [...res].map((n:any) => {
+        const hay = ((n.headline || "") + " " + (n.summary || "")).toLowerCase();
+        const score = kwTokens.reduce((s,tok)=>{
+          const re = new RegExp(tok.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g");
+          return s + (hay.match(re)?.length || 0);
+        }, 0);
+        return {...n, _score: score};
+      }).sort((a:any,b:any)=> (b._score - a._score) || ((b.datetime||0)-(a.datetime||0)));
+    }
+    return res;
+  }, [rawList, keyword, dateWindow, sourceFilter, sortMode]);
+
+  const list = filteredList;
+
   const runSentiment = async () => {
-    const list = tab === "symbol" ? symNews : tab === "holdings" ? holdNews : marketNews;
     if (!list.length) return;
     setSentBusy(true); setSentiment("");
     try {
@@ -1018,11 +1094,27 @@ Max 180 words. Respond in ENGLISH.`;
       const { reply } = await aiChat({ data: { messages: [{role:"user", content: prompt}], system: sys } });
       setSentiment(reply);
     } catch (e:any) {
-      setSentiment("Errore AI: " + e.message);
+      setSentiment("AI error: " + e.message);
     } finally { setSentBusy(false); }
   };
 
-  const list = tab === "symbol" ? symNews : tab === "holdings" ? holdNews : marketNews;
+  const resetFilters = () => {
+    setKeyword(""); setDateRange("7d"); setCustomFrom(""); setCustomTo("");
+    setSourceFilter("ALL"); setSortMode("newest");
+  };
+
+  const activeFilterCount =
+    (keyword.trim() ? 1 : 0) +
+    (dateRange !== "7d" ? 1 : 0) +
+    (sourceFilter !== "ALL" ? 1 : 0) +
+    (sortMode !== "newest" ? 1 : 0);
+
+  const inputStyle:any = {
+    background:B.bg, border:`1px solid ${B.border}`, color:B.gray1,
+    padding:"4px 8px", fontSize:13, fontFamily:"'Courier New',monospace",
+    outline:"none", letterSpacing:"0.04em",
+  };
+  const selectStyle:any = {...inputStyle, color:B.yellow, cursor:"pointer"};
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -1051,13 +1143,13 @@ Max 180 words. Respond in ENGLISH.`;
 
       {tab === "symbol" && (
         <div style={{padding:"6px",borderBottom:`1px solid ${B.border}`,background:B.panel2,display:"flex",gap:6}}>
-          <input value={symInput} onChange={e=>setSymInput(e.target.value.toUpperCase())}
+          <input data-testid="news-symbol-input" value={symInput} onChange={e=>setSymInput(e.target.value.toUpperCase())}
             onKeyDown={e=>{ if(e.key==="Enter") loadSymbol(symInput.trim()); }}
             placeholder="ENTER TICKER (AAPL, MSFT, NVDA)..."
             style={{flex:1,background:B.bg,border:`1px solid ${B.blue}`,color:B.yellow,
               padding:"6px 10px",fontSize:16,fontFamily:"'Courier New',monospace",outline:"none",
               letterSpacing:"0.04em",textTransform:"uppercase"}}/>
-          <button onClick={()=>loadSymbol(symInput.trim())} style={{
+          <button data-testid="news-symbol-fetch-btn" onClick={()=>loadSymbol(symInput.trim())} style={{
             background:B.blue,border:"none",color:B.white,padding:"6px 16px",cursor:"pointer",
             fontFamily:"'Courier New',monospace",fontSize:14,fontWeight:700,letterSpacing:"0.06em"}}>
             ▶ FETCH
@@ -1065,12 +1157,108 @@ Max 180 words. Respond in ENGLISH.`;
         </div>
       )}
 
+      {/* FILTER BAR (always visible) */}
+      <div style={{padding:"4px 6px",borderBottom:`1px solid ${B.border}`,background:B.panel2,
+        display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,flex:"1 1 220px",minWidth:160}}>
+          <span style={{color:B.cyan,fontSize:13,fontFamily:"'Courier New',monospace",fontWeight:700}}>🔍</span>
+          <input
+            data-testid="news-keyword-input"
+            value={keyword}
+            onChange={e=>setKeyword(e.target.value)}
+            placeholder="KEYWORD SEARCH (e.g. earnings, fed, ai)..."
+            style={{...inputStyle,flex:1,color:B.yellow,letterSpacing:"0.02em",borderColor:keyword?B.cyan:B.border}}
+          />
+          {keyword && (
+            <button onClick={()=>setKeyword("")} data-testid="news-keyword-clear" style={{
+              background:"none",border:"none",color:B.gray2,fontSize:14,cursor:"pointer",
+              fontFamily:"'Courier New',monospace",padding:"0 4px",
+            }}>✕</button>
+          )}
+        </div>
+        <button onClick={()=>setShowFilters(!showFilters)} data-testid="news-toggle-filters" style={{
+          background: showFilters ? B.blue : B.panel, border:`1px solid ${showFilters?B.blue:B.border}`,
+          color: showFilters ? B.white : B.gray1, padding:"4px 10px", cursor:"pointer",
+          fontFamily:"'Courier New',monospace", fontSize:13, fontWeight:700, letterSpacing:"0.06em",
+          whiteSpace:"nowrap",
+        }}>
+          {showFilters ? "▼" : "▶"} FILTERS{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </button>
+      </div>
+
+      {showFilters && (
+        <div style={{padding:"6px",borderBottom:`1px solid ${B.border}`,background:B.panel,
+          display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,
+            color:B.gray2,fontFamily:"'Courier New',monospace",letterSpacing:"0.06em"}}>
+            DATE
+            <select data-testid="news-date-select" value={dateRange} onChange={e=>setDateRange(e.target.value as any)} style={selectStyle}>
+              <option value="24h">LAST 24H</option>
+              <option value="3d">LAST 3D</option>
+              <option value="7d">LAST 7D</option>
+              <option value="14d">LAST 14D</option>
+              <option value="30d">LAST 30D</option>
+              <option value="all">ALL</option>
+              <option value="custom">CUSTOM</option>
+            </select>
+          </label>
+
+          {dateRange === "custom" && (
+            <>
+              <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,
+                color:B.gray2,fontFamily:"'Courier New',monospace"}}>
+                FROM
+                <input data-testid="news-date-from" type="date" value={customFrom}
+                  onChange={e=>setCustomFrom(e.target.value)} style={inputStyle}/>
+              </label>
+              <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,
+                color:B.gray2,fontFamily:"'Courier New',monospace"}}>
+                TO
+                <input data-testid="news-date-to" type="date" value={customTo}
+                  onChange={e=>setCustomTo(e.target.value)} style={inputStyle}/>
+              </label>
+            </>
+          )}
+
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,
+            color:B.gray2,fontFamily:"'Courier New',monospace",letterSpacing:"0.06em"}}>
+            SOURCE
+            <select data-testid="news-source-select" value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)} style={selectStyle}>
+              <option value="ALL">ALL ({allSources.length})</option>
+              {allSources.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,
+            color:B.gray2,fontFamily:"'Courier New',monospace",letterSpacing:"0.06em"}}>
+            SORT
+            <select data-testid="news-sort-select" value={sortMode} onChange={e=>setSortMode(e.target.value as any)} style={selectStyle}>
+              <option value="newest">NEWEST FIRST</option>
+              <option value="oldest">OLDEST FIRST</option>
+              <option value="relevance" disabled={!keyword.trim()}>RELEVANCE{!keyword.trim() ? " (NEED KEYWORD)" : ""}</option>
+            </select>
+          </label>
+
+          {activeFilterCount > 0 && (
+            <button data-testid="news-reset-filters" onClick={resetFilters} style={{
+              background:"transparent", border:`1px solid ${B.red}`, color:B.red,
+              padding:"4px 10px", cursor:"pointer", marginLeft:"auto",
+              fontFamily:"'Courier New',monospace", fontSize:12, fontWeight:700, letterSpacing:"0.06em",
+            }}>
+              ✕ RESET
+            </button>
+          )}
+        </div>
+      )}
+
       <div style={{padding:"4px 6px",borderBottom:`1px solid ${B.border}`,background:B.panel,
-        display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:6,flexWrap:"wrap"}}>
         <span style={{fontSize:14,color:B.gray2,fontFamily:"'Courier New',monospace",letterSpacing:"0.06em"}}>
-          {tab === "symbol" && symActive ? `${symActive} — ` : ""}{list.length} HEADLINES
+          {tab === "symbol" && symActive ? `${symActive} — ` : ""}
+          <span style={{color:B.yellow,fontWeight:700}}>{list.length}</span>
+          {rawList.length !== list.length ? <span style={{color:B.gray3}}> / {rawList.length}</span> : ""} HEADLINES
         </span>
-        <button onClick={runSentiment} disabled={sentBusy || !list.length} style={{
+        <button data-testid="news-ai-sentiment-btn" onClick={runSentiment} disabled={sentBusy || !list.length} style={{
           background:"transparent", border:`1px solid ${B.cyan}`, color:B.cyan,
           padding:"3px 10px", cursor:list.length?"pointer":"not-allowed",
           fontFamily:"'Courier New',monospace", fontSize:14, fontWeight:700, letterSpacing:"0.06em",
@@ -1103,7 +1291,16 @@ Max 180 words. Respond in ENGLISH.`;
 
         {loading && <Spinner text="FETCHING NEWS..."/>}
 
-        {!loading && list.length === 0 && (
+        {!loading && rawList.length > 0 && list.length === 0 && (
+          <div style={{padding:"14px 10px",fontSize:14,color:B.yellow,fontFamily:"'Courier New',monospace",textAlign:"center"}}>
+            ⚠ NO HEADLINES MATCH YOUR FILTERS
+            <div style={{fontSize:12,color:B.gray3,marginTop:6}}>
+              Try adjusting keyword, date range or source.
+            </div>
+          </div>
+        )}
+
+        {!loading && rawList.length === 0 && (
           <div style={{padding:"14px 10px",fontSize:14,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center"}}>
             {tab === "symbol" ? "ENTER A TICKER ABOVE TO LOAD COMPANY NEWS" :
              tab === "holdings" ? "NO HOLDINGS YET — ADD SECURITIES VIA SEARCH" :
@@ -1114,9 +1311,10 @@ Max 180 words. Respond in ENGLISH.`;
         {list.map((n:any, i:number) => {
           const dt = new Date((n.datetime || 0) * 1000);
           const dateStr = dt.toLocaleString("en-US", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false });
+          const kwTokens = keyword.trim().toLowerCase().split(/\s+/).filter(Boolean);
           return (
             <a key={(n.id || i) + "_" + i} href={n.url && n.url !== "#" ? n.url : undefined}
-               target="_blank" rel="noreferrer noopener"
+               target="_blank" rel="noreferrer noopener" data-testid="news-headline-item"
                style={{display:"block",textDecoration:"none",padding:"6px 10px",
                        borderBottom:`1px solid ${B.border}`,cursor:n.url && n.url !== "#" ? "pointer" : "default"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
@@ -1126,12 +1324,12 @@ Max 180 words. Respond in ENGLISH.`;
                 {n.category && <span style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace",border:`1px solid ${B.gray4}`,padding:"0 4px",textTransform:"uppercase",marginLeft:"auto"}}>{n.category}</span>}
               </div>
               <div style={{fontSize:16,color:B.gray1,fontFamily:"'Courier New',monospace",fontWeight:700,marginBottom:2,lineHeight:1.3}}>
-                {n.headline}
+                {highlightKeyword(n.headline, kwTokens)}
               </div>
               {n.summary && (
                 <div style={{fontSize:13,color:B.gray2,fontFamily:"'Courier New',monospace",lineHeight:1.4,
                              overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
-                  {n.summary}
+                  {highlightKeyword(n.summary, kwTokens)}
                 </div>
               )}
             </a>
@@ -1139,6 +1337,20 @@ Max 180 words. Respond in ENGLISH.`;
         })}
       </div>
     </div>
+  );
+}
+
+function highlightKeyword(text:string, tokens:string[]) {
+  if (!text) return text;
+  if (!tokens || tokens.length === 0) return text;
+  const escaped = tokens.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).filter(Boolean);
+  if (escaped.length === 0) return text;
+  const re = new RegExp(`(${escaped.join("|")})`, "ig");
+  const parts = text.split(re);
+  return parts.map((p,i) =>
+    re.test(p)
+      ? <mark key={i} style={{background:"#FFFF0033",color:B.yellow,padding:"0 2px"}}>{p}</mark>
+      : <span key={i}>{p}</span>
   );
 }
 
