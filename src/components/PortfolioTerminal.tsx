@@ -976,6 +976,8 @@ const SEV_STYLE:any = {
 function AnalysisPage({holdings}:any) {
   const m=useMemo(()=>pMet(holdings),[holdings]);
   const [sub,setSub]=usePersistentState<string>("analysis_sub", "alloc");
+  const [aiExplain, setAiExplain] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
   if (!holdings.length) return (
     <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <span style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace"}}>NO DATA — ADD SECURITIES VIA SEARCH</span>
@@ -988,6 +990,29 @@ function AnalysisPage({holdings}:any) {
   const alerts = useMemo(() => computeAlerts(holdings, m), [holdings, m]);
   const highCount = alerts.filter(a => a.sev==="HIGH").length;
   const medCount  = alerts.filter(a => a.sev==="MED").length;
+
+  const explainAlerts = async () => {
+    if (!alerts.length || aiBusy) return;
+    setAiBusy(true); setAiExplain("");
+    try {
+      const alertsText = alerts.map((a, i) =>
+        `${i+1}. [${a.sev}] ${a.title} (${a.metric}): ${a.detail}`
+      ).join("\n");
+      const positionsText = holdings.map((h:any) =>
+        `${h.asset.ticker} — ${((h.value/m.total)*100).toFixed(1)}% weight, sector: ${h.asset.sector || "N/A"}`
+      ).join("\n");
+      const sys = `You are STRATEGIC MARKETS AI, an EDUCATIONAL analytics assistant. NO personalized investment advice under MiFID II. Frame everything as HYPOTHETICAL SCENARIOS and QUANTITATIVE OBSERVATIONS.
+Given a set of exposure alerts, explain what they mean educationally and describe HYPOTHETICAL rebalancing SCENARIOS (not recommendations) that would statistically reduce the flagged risks — e.g. "a scenario where MSFT weight was reduced from 66% to 25% would lower HHI by ~X points and reduce single-name concentration".
+Structure: 1) brief overview 2) 2-3 key hypothetical scenarios with quantitative rationale 3) BOTTOM LINE. Use **bold** for key metrics.
+ALWAYS end with: "DISCLAIMER: For educational and informational purposes only. Not investment advice."
+Max 250 words. Respond in ENGLISH.`;
+      const prompt = `My hypothetical portfolio positions:\n${positionsText}\n\nActive risk alerts flagged by the system:\n${alertsText}\n\nExplain these alerts and outline hypothetical rebalancing scenarios (educational only).`;
+      const { reply } = await aiChat({ data: { messages: [{role:"user", content: prompt}], system: sys } });
+      setAiExplain(reply);
+    } catch (e:any) {
+      setAiExplain("AI error: " + e.message);
+    } finally { setAiBusy(false); }
+  };
 
   // Performance data
   const perfData = useMemo(() => {
@@ -1082,6 +1107,40 @@ function AnalysisPage({holdings}:any) {
 
             {/* Alerts list */}
             <BPanel title="EXPOSURE ALERTS &amp; RISK CHECKS" style={{marginTop:1}}>
+              <div style={{padding:"6px 12px",background:B.panel,borderBottom:`1px solid ${B.border}`,
+                display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <span style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace",letterSpacing:"0.06em"}}>
+                  {alerts.length} CHECK{alerts.length!==1?"S":""} EVALUATED
+                </span>
+                <button data-testid="risk-ai-explain-btn" onClick={explainAlerts} disabled={aiBusy || alerts[0]?.sev==="OK"} style={{
+                  background:"transparent", border:`1px solid ${B.cyan}`, color:B.cyan,
+                  padding:"4px 12px", cursor: alerts[0]?.sev==="OK" ? "not-allowed" : "pointer",
+                  fontFamily:"'Courier New',monospace", fontSize:12, fontWeight:700, letterSpacing:"0.08em",
+                  opacity: alerts[0]?.sev==="OK" ? 0.4 : 1,
+                }}>
+                  {aiBusy ? "ANALYZING…" : "✦ EXPLAIN ALL ALERTS"}
+                </button>
+              </div>
+              {aiExplain && (
+                <div style={{padding:"10px 12px",background:"#001a1a",borderBottom:`1px solid ${B.cyan}`,
+                  fontFamily:"'Courier New',monospace"}}>
+                  <div style={{fontSize:12,color:B.cyan,fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>
+                    ✦ STRATEGIC MARKETS AI — HYPOTHETICAL SCENARIOS
+                  </div>
+                  {aiExplain.split("\n").map((line, i) => {
+                    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                    return (
+                      <div key={i} style={{fontSize:12,color:B.gray1,lineHeight:1.55,marginBottom:2}}>
+                        {parts.map((p, j) =>
+                          p.startsWith("**") && p.endsWith("**")
+                            ? <span key={j} style={{color:B.yellow,fontWeight:700}}>{p.slice(2,-2)}</span>
+                            : p
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div style={{padding:0}}>
                 {alerts.map((a, i) => {
                   const s = SEV_STYLE[a.sev];
