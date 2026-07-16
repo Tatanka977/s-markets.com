@@ -360,3 +360,69 @@ export const batchRefresh = createServerFn({ method: "POST" })
     }
     return results;
   });
+
+// ─── Market Status (open/closed) via Finnhub ────────────────────────────
+interface FhMarketStatus {
+  exchange?: string;
+  holiday?: string | null;
+  isOpen?: boolean;
+  session?: string | null;
+  timezone?: string;
+  t?: number;
+}
+
+export interface MarketStatus {
+  code: string;         // "US", "L", "MI", ...
+  label: string;        // "NYSE / NASDAQ" ...
+  isOpen: boolean;
+  session: string;      // "pre-market" | "regular" | "post-market" | "closed"
+  timezone: string;
+  holiday: string | null;
+}
+
+const EXCHANGE_LABELS: Record<string, string> = {
+  US: "NYSE / NASDAQ",
+  L:  "LONDON",
+  MI: "MILAN",
+  T:  "TOKYO",
+  HK: "HONG KONG",
+  F:  "FRANKFURT",
+  PA: "PARIS",
+};
+
+async function fetchExchangeStatus(code: string): Promise<MarketStatus> {
+  const key = process.env.FINNHUB_API_KEY;
+  const fallback: MarketStatus = {
+    code,
+    label: EXCHANGE_LABELS[code] || code,
+    isOpen: false,
+    session: "unknown",
+    timezone: "UTC",
+    holiday: null,
+  };
+  if (!key) return fallback;
+  try {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/stock/market-status?exchange=${encodeURIComponent(code)}&token=${key}`,
+    );
+    if (!r.ok) return fallback;
+    const j = (await r.json()) as FhMarketStatus;
+    return {
+      code,
+      label: EXCHANGE_LABELS[code] || code,
+      isOpen: !!j.isOpen,
+      session: (j.session || (j.isOpen ? "regular" : "closed")).toString(),
+      timezone: j.timezone || "UTC",
+      holiday: j.holiday || null,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export const fetchMarketStatus = createServerFn({ method: "GET" })
+  .inputValidator((d: { exchanges?: string[] } | undefined) => d ?? {})
+  .handler(async ({ data }) => {
+    const codes = data.exchanges && data.exchanges.length ? data.exchanges : ["US", "L", "MI"];
+    return await Promise.all(codes.map(fetchExchangeStatus));
+  });

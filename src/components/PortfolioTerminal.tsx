@@ -10,6 +10,7 @@ import {
   searchSecurities as srvSearch,
   fetchQuote as srvQuote,
   batchRefresh as srvBatch,
+  fetchMarketStatus as srvMarketStatus,
 } from "@/lib/finance.functions";
 import { aiChat } from "@/lib/ai.functions";
 import {
@@ -79,6 +80,7 @@ const pMet = (hs) => {
 const searchSecurities = (q, category) => srvSearch({ data: { q, category } });
 const fetchQuote = (sym) => srvQuote({ data: { symbol: sym } });
 const batchRefresh = (symbols) => srvBatch({ data: { symbols } });
+const fetchMarketStatus = (exchanges?:string[]) => srvMarketStatus({ data: { exchanges } });
 const fetchMarketNews = (category) => srvMarketNews({ data: { category } });
 const fetchCompanyNews = (symbol, days=14) => srvCompanyNews({ data: { symbol, days } });
 
@@ -287,6 +289,113 @@ function BottomNav({page,setPage,badge}:any) {
   );
 }
 
+function MarketStatusBar() {
+  const [statuses, setStatuses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    let alive = true;
+    fetchMarketStatus(["US", "L", "MI"]).then(d => {
+      if (alive) { setStatuses(d || []); setLoading(false); }
+    }).catch(() => { if (alive) setLoading(false); });
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  const fmtLocal = (tz: string) => {
+    try { return new Date(now).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }); }
+    catch { return "--:--"; }
+  };
+
+  return (
+    <BPanel title="GLOBAL MARKET STATUS">
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",
+        gap:0, background:B.panel}}>
+        {loading && (
+          <div style={{padding:"8px 10px",color:B.gray3,fontSize:12,
+            fontFamily:"'Courier New',monospace"}}>LOADING…</div>
+        )}
+        {statuses.map((s:any, i:number) => {
+          const color = s.holiday ? B.yellow : s.isOpen ? B.green : B.red;
+          return (
+            <div key={s.code} style={{padding:"6px 10px",
+              borderRight: i < statuses.length - 1 ? `1px solid ${B.border}` : "none",
+              display:"flex",flexDirection:"column",gap:2,
+              fontFamily:"'Courier New',monospace"}}>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <span style={{width:8,height:8,background:color,borderRadius:"50%",
+                  animation: s.isOpen ? "pulse 1.5s infinite" : "none",display:"inline-block"}}/>
+                <span style={{fontSize:12,color:B.gray1,fontWeight:700,letterSpacing:"0.06em"}}>{s.label}</span>
+              </div>
+              <div style={{fontSize:11,color:color,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase"}}>
+                {s.holiday ? "HOLIDAY" : s.isOpen ? (s.session === "regular" ? "OPEN" : s.session.toUpperCase()) : "CLOSED"}
+              </div>
+              <div style={{fontSize:11,color:B.gray3}}>{fmtLocal(s.timezone)} local</div>
+            </div>
+          );
+        })}
+      </div>
+    </BPanel>
+  );
+}
+
+function IndicesOverview() {
+  const INDICES = [
+    { sym: "SPY",  label: "S&P 500 ETF" },
+    { sym: "QQQ",  label: "NASDAQ 100" },
+    { sym: "DIA",  label: "DOW JONES" },
+    { sym: "IWM",  label: "RUSSELL 2000" },
+    { sym: "VIX",  label: "VOLATILITY" },
+    { sym: "TLT",  label: "20YR TREASURY" },
+  ];
+  const [quotes, setQuotes] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    batchRefresh(INDICES.map(i => i.sym))
+      .then(list => {
+        if (!alive) return;
+        setQuotes(Object.fromEntries((list || []).map((q:any) => [q.symbol, q])));
+      })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <BPanel title="KEY INDICES — SNAPSHOT" style={{marginTop:1}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:0}}>
+        {INDICES.map((it, i) => {
+          const q = quotes[it.sym];
+          const price = q?.price;
+          const chg = q?.dayChangePct;
+          const chgCol = pCol(chg);
+          return (
+            <div key={it.sym} style={{padding:"6px 10px",
+              borderRight: (i + 1) % 3 !== 0 ? `1px solid ${B.border}` : "none",
+              borderBottom: i < 3 ? `1px solid ${B.border}` : "none",
+              fontFamily:"'Courier New',monospace"}}>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:6}}>
+                <span style={{fontSize:13,color:B.blue,fontWeight:700,letterSpacing:"0.04em"}}>{it.sym}</span>
+                <span style={{fontSize:10,color:B.gray3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{it.label}</span>
+              </div>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginTop:2}}>
+                <span style={{fontSize:15,color:B.yellow,fontWeight:700}}>
+                  {loading ? "…" : price != null ? price.toLocaleString(undefined,{maximumFractionDigits:2}) : "---"}
+                </span>
+                <span style={{fontSize:12,color:chgCol,fontWeight:700}}>
+                  {chg != null ? `${pSign(fmt(chg, 2))}%` : "—"}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </BPanel>
+  );
+}
+
 function HomePage({holdings,setPage,onRefresh,refreshing}:any) {
   const m=useMemo(()=>pMet(holdings),[holdings]);
   const { user } = useUser();
@@ -307,6 +416,10 @@ function HomePage({holdings,setPage,onRefresh,refreshing}:any) {
 
   return (
     <div style={{flex:1,overflowY:"auto",paddingBottom:4}}>
+      <MarketStatusBar/>
+      <IndicesOverview/>
+
+      <div style={{marginTop:1}}>
       <BPanel title="PORTFOLIO OVERVIEW  LIVE DATA">
         <div style={{padding:"6px 8px"}}>
           {!m?(
@@ -407,6 +520,7 @@ function HomePage({holdings,setPage,onRefresh,refreshing}:any) {
             <span style={{marginLeft:"auto",fontSize:15,color:B.gray3}}>{">"}</span>
           </button>
         ))}
+      </div>
       </div>
     </div>
   );
@@ -1580,7 +1694,6 @@ export default function PortfolioTerminal() {
       {(time:string) => (
         <>
           <TopBar time={time}/>
-          <FKeyBar page={page} setPage={setPage}/>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
             {page==="home"       && <HomePage     holdings={holdings} setPage={setPage} onRefresh={refreshPrices} refreshing={refreshing}/>}
             {page==="search"     && <SearchPage   onAdd={addToPortfolio} portfolio={holdings}/>}
