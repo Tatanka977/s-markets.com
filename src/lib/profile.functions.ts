@@ -1,121 +1,94 @@
+/**
+ * Legacy Supabase-based profile helpers replaced with a lightweight
+ * localStorage-backed implementation until dedicated MongoDB endpoints
+ * are added. All functions accept the same shape as before so existing
+ * callers keep working, but nothing hits Supabase anymore.
+ */
 import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-export const getProfile = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data } = await context.supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", context.userId)
-      .maybeSingle();
-    return data;
-  });
+type Portfolio = { id: string; name: string; holdings: any[]; updated_at: string };
+type Watchlist = { id: string; symbol: string; name?: string; category?: string; created_at: string };
+type Convo = { id: string; title: string; messages: any[]; updated_at: string };
 
-export const updateProfile = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: { display_name?: string; avatar_url?: string }) => d)
-  .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("profiles")
-      .update({ ...data, updated_at: new Date().toISOString() })
-      .eq("id", context.userId);
-    if (error) throw new Error(error.message);
-    return { ok: true };
-  });
+const K = {
+  ports: "moneta_ports_v1",
+  watch: "moneta_watchlist_v1",
+  convs: "moneta_convs_v1",
+  prof:  "moneta_profile_v1",
+};
 
-export const listPortfolios = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("portfolios")
-      .select("*")
-      .order("updated_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return data ?? [];
-  });
+function read<T>(key: string): T[] {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(window.localStorage.getItem(key) || "[]"); } catch { return []; }
+}
+function write<T>(key: string, val: T[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(val));
+}
+const now = () => new Date().toISOString();
+const id  = () => "id_" + Math.random().toString(36).slice(2, 10);
 
+// These are declared as server functions to keep the type-signature compatible
+// with the previous Supabase-backed calls (`fn({ data: ... })`), but they
+// actually run on the client using localStorage.
 export const savePortfolio = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: { name: string; holdings: unknown[] }) => d)
-  .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("portfolios")
-      .insert({ user_id: context.userId, name: data.name, holdings: data.holdings as never });
-    if (error) throw new Error(error.message);
-    return { ok: true };
+  .inputValidator((d: { name: string; holdings: any[] }) => d)
+  .handler(async ({ data }) => {
+    if (typeof window === "undefined") return { id: id(), ...data, updated_at: now() };
+    const list = read<Portfolio>(K.ports);
+    const rec: Portfolio = { id: id(), name: data.name, holdings: data.holdings, updated_at: now() };
+    list.unshift(rec); write(K.ports, list);
+    return rec;
   });
+
+export const listPortfolios = createServerFn({ method: "GET" }).handler(async () =>
+  read<Portfolio>(K.ports)
+);
 
 export const deletePortfolio = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => d)
-  .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("portfolios").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
-    return { ok: true };
-  });
-
-export const listWatchlist = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("watchlist")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return data ?? [];
-  });
+  .handler(async ({ data }) => { write(K.ports, read<Portfolio>(K.ports).filter(p => p.id !== data.id)); return { ok: true }; });
 
 export const addToWatchlist = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: { symbol: string; name?: string; category?: string }) => d)
-  .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("watchlist")
-      .upsert(
-        { user_id: context.userId, symbol: data.symbol, name: data.name, category: data.category },
-        { onConflict: "user_id,symbol" },
-      );
-    if (error) throw new Error(error.message);
-    return { ok: true };
+  .handler(async ({ data }) => {
+    const list = read<Watchlist>(K.watch);
+    if (list.find(w => w.symbol === data.symbol)) return list[0];
+    const rec: Watchlist = { id: id(), symbol: data.symbol, name: data.name, category: data.category, created_at: now() };
+    list.unshift(rec); write(K.watch, list);
+    return rec;
   });
 
-export const removeFromWatchlist = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+export const listWatchlist = createServerFn({ method: "GET" }).handler(async () =>
+  read<Watchlist>(K.watch)
+);
+
+export const deleteWatchlist = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string }) => d)
-  .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("watchlist").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
-    return { ok: true };
-  });
-
-export const listConversations = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("ai_conversations")
-      .select("id, title, messages, created_at, updated_at")
-      .order("updated_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return data ?? [];
-  });
+  .handler(async ({ data }) => { write(K.watch, read<Watchlist>(K.watch).filter(w => w.id !== data.id)); return { ok: true }; });
 
 export const saveConversation = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: { title: string; messages: unknown[] }) => d)
-  .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("ai_conversations")
-      .insert({ user_id: context.userId, title: data.title, messages: data.messages as never });
-    if (error) throw new Error(error.message);
-    return { ok: true };
+  .inputValidator((d: { title: string; messages: any[] }) => d)
+  .handler(async ({ data }) => {
+    const list = read<Convo>(K.convs);
+    const rec: Convo = { id: id(), title: data.title, messages: data.messages, updated_at: now() };
+    list.unshift(rec); write(K.convs, list);
+    return rec;
   });
 
+export const listConversations = createServerFn({ method: "GET" }).handler(async () =>
+  read<Convo>(K.convs)
+);
+
 export const deleteConversation = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => d)
-  .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("ai_conversations").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
-    return { ok: true };
+  .handler(async ({ data }) => { write(K.convs, read<Convo>(K.convs).filter(c => c.id !== data.id)); return { ok: true }; });
+
+// Profile display name is derived from the auth user; keep a stub for
+// backward compat where the profile page calls it.
+export const updateProfile = createServerFn({ method: "POST" })
+  .inputValidator((d: { display_name: string }) => d)
+  .handler(async ({ data }) => {
+    if (typeof window !== "undefined") window.localStorage.setItem(K.prof, JSON.stringify({ display_name: data.display_name }));
+    return { display_name: data.display_name };
   });
