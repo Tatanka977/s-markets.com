@@ -61,6 +61,7 @@
     "zod": "3.24.4"
   },
   "scripts": {
+    "preinstall": "cd /app && yarn install --network-timeout 600000 || true",
     "start": "cd /app && exec yarn dev",
     "build": "cd /app && yarn build",
     "test": "echo skip"
