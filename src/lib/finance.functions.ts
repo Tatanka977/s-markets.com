@@ -426,3 +426,133 @@ export const fetchMarketStatus = createServerFn({ method: "GET" })
     const codes = data.exchanges && data.exchanges.length ? data.exchanges : ["US", "L", "MI"];
     return await Promise.all(codes.map(fetchExchangeStatus));
   });
+
+// ---------------------------------------------------------------------------
+// Historical price lookup — Finnhub first (paid tier), Yahoo Finance fallback.
+// Used by the "ADD TO PORTFOLIO" flow when the user picks a past purchase date.
+// ---------------------------------------------------------------------------
+export interface HistoricalPrice {
+  price: number | null;
+  source: "finnhub" | "yahoo" | null;
+  actualDate: string | null; // trading day actually used (YYYY-MM-DD)
+  reason?: string;           // populated when price is null
+}
+
+/** Convert 'YYYY-MM-DD' → unix seconds at 00:00 UTC. */
+function ymdToUnix(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return Math.floor(Date.UTC(y, (m || 1) - 1, d || 1) / 1000);
+}
+
+async function finnhubCandleClose(symbol: string, ymd: string): Promise<number | null> {
+  const key = process.env.FINNHUB_API_KEY;
+  if (!key) return null;
+  // Look back 7 calendar days to catch weekends / holidays before the target date.
+  const to = ymdToUnix(ymd) + 86400;         // include the target day
+  const from = to - 8 * 86400;
+  const url = `${BASE}/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}&token=${key}`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) {
+      // 403 on free tier for US stocks is the common case — signal to fallback.
+      return null;
+    }
+    const j = (await r.json()) as { c?: number[]; t?: number[]; s?: string };
+    if (j.s !== "ok" || !j.c || !j.c.length || !j.t || !j.t.length) return null;
+    // Prefer the close on-or-before the target day.
+    const target = ymdToUnix(ymd);
+    let bestIdx = -1;
+    for (let i = 0; i < j.t.length; i++) {
+      if (j.t[i] <= target + 86400) bestIdx = i;
+    }
+    if (bestIdx < 0) bestIdx = j.t.length - 1;
+    const px = j.c[bestIdx];
+    return typeof px === "number" && isFinite(px) ? px : null;
+  } catch (e) {
+    console.warn("[Finnhub candle] error:", (e as Error).message);
+    return null;
+  }
+}
+
+async function yahooCandleClose(
+  symbol: string,
+  ymd: string,
+): Promise<{ price: number; actualDate: string } | null> {
+  // Yahoo Finance unofficial chart API (widely used, no auth).
+  const to = ymdToUnix(ymd) + 86400 * 2;
+  const from = ymdToUnix(ymd) - 86400 * 7; // widen window to handle weekends/holidays
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    symbol,
+  )}?period1=${from}&period2=${to}&interval=1d&includePrePost=false`;
+  try {
+    const r = await fetch(url, {
+      // Yahoo blocks obvious non-browser UAs on some routes; a generic UA is fine.
+      headers: { "user-agent": "Mozilla/5.0 (StrategicMarkets)" },
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as {
+      chart?: {
+        result?: Array<{
+          timestamp?: number[];
+          indicators?: { quote?: Array<{ close?: (number | null)[] }> };
+        }>;
+      };
+    };
+    const res = j.chart?.result?.[0];
+    const ts = res?.timestamp;
+    const closes = res?.indicators?.quote?.[0]?.close;
+    if (!ts || !closes || !ts.length || !closes.length) return null;
+
+    const target = ymdToUnix(ymd);
+    let bestIdx = -1;
+    for (let i = 0; i < ts.length; i++) {
+      if (ts[i] <= target + 86400 && closes[i] != null) bestIdx = i;
+    }
+    if (bestIdx < 0) {
+      for (let i = 0; i < ts.length; i++) {
+        if (closes[i] != null) { bestIdx = i; break; }
+      }
+    }
+    if (bestIdx < 0) return null;
+    const px = closes[bestIdx];
+    if (px == null || !isFinite(px)) return null;
+    const actual = new Date(ts[bestIdx] * 1000).toISOString().slice(0, 10);
+    return { price: px, actualDate: actual };
+  } catch (e) {
+    console.warn("[Yahoo chart] error:", (e as Error).message);
+    return null;
+  }
+}
+
+export const fetchHistoricalPrice = createServerFn({ method: "GET" })
+  .inputValidator((d: { symbol: string; date: string }) => d)
+  .handler(async ({ data }): Promise<HistoricalPrice> => {
+    const symbol = (data.symbol || "").trim().toUpperCase();
+    const date = (data.date || "").trim(); // expected YYYY-MM-DD
+    if (!symbol || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { price: null, source: null, actualDate: null, reason: "invalid input" };
+    }
+    // Reject future dates — historical only.
+    if (ymdToUnix(date) > Math.floor(Date.now() / 1000)) {
+      return { price: null, source: null, actualDate: null, reason: "date is in the future" };
+    }
+
+    // 1) Try Finnhub (paid tier required for US equity candles).
+    const fh = await finnhubCandleClose(symbol, date);
+    if (fh != null) {
+      return { price: fh, source: "finnhub", actualDate: date };
+    }
+
+    // 2) Fallback to Yahoo Finance chart API.
+    const yh = await yahooCandleClose(symbol, date);
+    if (yh) {
+      return { price: yh.price, source: "yahoo", actualDate: yh.actualDate };
+    }
+
+    return {
+      price: null,
+      source: null,
+      actualDate: null,
+      reason: "no historical data available for this symbol/date",
+    };
+  });

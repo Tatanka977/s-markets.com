@@ -50,6 +50,12 @@ Language: **Italian** (all responses in Italian).
   - CSS variables (`--sm-*`) in styles.css for both palettes
   - Global overrides for font/uppercase/border-radius/buttons in Aurora mode
   - Toggle button (iOS-style switch) in top bar with `data-testid="theme-toggle-button"`
+- 2026-02: **Historical price backfill** for past purchase dates
+  - New server function `fetchHistoricalPrice(symbol, date)` in `finance.functions.ts`
+  - Provider chain: **Finnhub** `/stock/candle` → **Yahoo Finance** chart API → **live-price fallback** with warning
+  - Handles weekends/holidays by walking back to the nearest trading day (8-day window)
+  - UI: `SearchPage` auto-fetches on `PURCHASE DATE` change (past date only), pre-fills BUY PRICE, shows source + actual trading day in a status banner (green OK / yellow WARN / red ERR)
+  - `data-testid`: `search-purchase-date`, `search-historical-status`
 
 ## Known Blockers
 - **P0 — Production deployment fails on Cloud Build.** The app is TanStack Start SSR at `/app` root, but Emergent template deployer expects standard `/app/frontend` Vite/CRA output. Static scan by `deployment_agent` reports PASS but actual `cloud build: build failed`. Recommended path: Save to GitHub → deploy on Vercel/Netlify (native TanStack Start support).

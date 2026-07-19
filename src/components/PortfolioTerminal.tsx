@@ -11,6 +11,7 @@ import {
   fetchQuote as srvQuote,
   batchRefresh as srvBatch,
   fetchMarketStatus as srvMarketStatus,
+  fetchHistoricalPrice as srvHistorical,
 } from "@/lib/finance.functions";
 import { aiChat } from "@/lib/ai.functions";
 import {
@@ -83,6 +84,7 @@ const searchSecurities = (q, category) => srvSearch({ data: { q, category } });
 const fetchQuote = (sym) => srvQuote({ data: { symbol: sym } });
 const batchRefresh = (symbols) => srvBatch({ data: { symbols } });
 const fetchMarketStatus = (exchanges?:string[]) => srvMarketStatus({ data: { exchanges } });
+const fetchHistoricalPrice = (symbol, date) => srvHistorical({ data: { symbol, date } });
 const fetchMarketNews = (category) => srvMarketNews({ data: { category } });
 const fetchCompanyNews = (symbol, days=14) => srvCompanyNews({ data: { symbol, days } });
 
@@ -574,6 +576,7 @@ function SearchPage({onAdd,portfolio}:any) {
 
   const selectSecurity = async (r) => {
     setSel(r); setLoad(true); setDetail(null); setError(""); setQty("1");
+    setHistInfo({kind:null, text:""});
     try {
       const d = await fetchQuote(r.symbol);
       d.sector  = d.sector  || r.sector  || "N/A";
@@ -592,6 +595,50 @@ function SearchPage({onAdd,portfolio}:any) {
   const [watchMsg, setWatchMsg] = useState("");
   const [watchBusy, setWatchBusy] = useState(false);
   const [addMsg, setAddMsg] = useState("");
+  // Historical price lookup state (Finnhub → Yahoo fallback → live-price fallback)
+  const [histBusy, setHistBusy] = useState(false);
+  const [histInfo, setHistInfo] = useState<{kind:"ok"|"warn"|"err"|null; text:string}>({kind:null, text:""});
+
+  const todayYmd = new Date().toISOString().slice(0,10);
+
+  const handleDateChange = useCallback(async (newDate:string) => {
+    setBuyDt(newDate);
+    if (!detail) return;
+    // If user picked today (or empty), just keep the live price and clear the message.
+    if (!newDate || newDate === todayYmd || newDate > todayYmd) {
+      setHistInfo({kind:null, text:""});
+      return;
+    }
+    // Past date → fetch historical close.
+    setHistBusy(true); setHistInfo({kind:null, text:"Fetching historical price..."});
+    try {
+      const sym = detail.ticker || detail.symbol;
+      const res = await fetchHistoricalPrice(sym, newDate);
+      if (res.price != null) {
+        setBuyPx(res.price.toFixed(2));
+        const sourceLbl = res.source === "finnhub" ? "Finnhub" : "Yahoo Finance";
+        const sameDay = res.actualDate === newDate;
+        setHistInfo({
+          kind:"ok",
+          text: sameDay
+            ? `Historical close from ${sourceLbl} (${res.actualDate})`
+            : `No trading on ${newDate}. Using ${sourceLbl} close of ${res.actualDate}`,
+        });
+      } else {
+        // Fallback to live price + warn the user (option B).
+        if (detail.price != null) setBuyPx(detail.price.toFixed(2));
+        setHistInfo({
+          kind:"warn",
+          text:`Historical price unavailable — using current live price. Reason: ${res.reason || "not found"}`,
+        });
+      }
+    } catch (e:any) {
+      if (detail.price != null) setBuyPx(detail.price.toFixed(2));
+      setHistInfo({kind:"err", text:`Lookup error — using current live price. (${e.message || "network"})`});
+    } finally {
+      setHistBusy(false);
+    }
+  }, [detail, todayYmd, setBuyDt, setBuyPx]);
   const addWatch = async () => {
     if (!detail) return;
     if (!user) { window.location.href = "/auth"; return; }
@@ -665,11 +712,24 @@ function SearchPage({onAdd,portfolio}:any) {
             </div>
             <div>
               <div style={{fontSize:14,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:2}}>PURCHASE DATE</div>
-              <input value={buyDt} onChange={e=>setBuyDt(e.target.value)} type="date"
-                style={{width:"100%",background:B.bg,border:`1px solid ${B.border}`,color:B.cyan,
+              <input value={buyDt} onChange={e=>handleDateChange(e.target.value)} type="date" max={todayYmd}
+                data-testid="search-purchase-date"
+                style={{width:"100%",background:B.bg,border:`1px solid ${histBusy?B.blue:B.border}`,color:B.cyan,
                   padding:"4px 6px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
             </div>
           </div>
+          {histInfo.text && (
+            <div data-testid="search-historical-status" style={{
+              padding:"4px 8px", marginBottom:6, fontSize:12, fontWeight:700,
+              fontFamily:"'Courier New',monospace", letterSpacing:"0.04em",
+              border:`1px solid ${histInfo.kind==="ok"?B.green:histInfo.kind==="warn"?B.yellow:histInfo.kind==="err"?B.red:B.border}`,
+              color: histInfo.kind==="ok"?B.green:histInfo.kind==="warn"?B.yellow:histInfo.kind==="err"?B.red:B.gray2,
+              background: B.panel2,
+            }}>
+              {histBusy ? "⏱ " : histInfo.kind==="ok" ? "✓ " : histInfo.kind==="warn" ? "⚠ " : histInfo.kind==="err" ? "✗ " : ""}
+              {histInfo.text}
+            </div>
+          )}
           <div style={{fontSize:15,color:B.gray2,fontFamily:"'Courier New',monospace",marginBottom:6}}>
             COST = ${fmtM((parseFloat(qty)||0)*(parseFloat(buyPx)||detail.price||0))}
             {" · "}MKT = ${fmtM((parseFloat(qty)||0)*(detail.price||0))}
