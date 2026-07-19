@@ -1308,8 +1308,8 @@ Max 250 words. Respond in ENGLISH.`;
                 </button>
               </div>
               {aiExplain && (
-                <div style={{padding:"10px 12px",background:"#001a1a",borderBottom:`1px solid ${B.cyan}`,
-                  fontFamily:"'Courier New',monospace"}}>
+  <div style={{padding:"10px 12px",background:B.panel2,borderBottom:`1px solid ${B.cyan}`,
+    fontFamily:"'Courier New',monospace"}}>
                   <div style={{fontSize:12,color:B.cyan,fontWeight:700,marginBottom:6,letterSpacing:"0.08em"}}>
                     ✦ STRATEGIC MARKETS AI — HYPOTHETICAL SCENARIOS
                   </div>
