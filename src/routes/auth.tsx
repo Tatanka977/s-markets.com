@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Strategic Markets — Sign In" }] }),
@@ -22,12 +23,14 @@ function AuthPage() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const fontMono = "'Courier New', Courier, monospace";
-  const API = (import.meta as any).env?.VITE_BACKEND_URL || "";
 
-  const handleGoogle = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  const handleGoogle = async () => {
+    setErr("");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin + "/" },
+    });
+    if (error) setErr(error.message);
   };
 
   const handleEmail = async (e: any) => {
@@ -35,17 +38,20 @@ function AuthPage() {
     setErr("");
     setLoading(true);
     try {
-      const endpoint = mode === "signin" ? "/api/auth/login" : "/api/auth/register";
-      const body: any = { email, password };
-      if (mode === "signup") body.name = name || email.split("@")[0];
-      const r = await fetch(`${API}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+      if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { name: name || email.split("@")[0] } },
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+      }
       navigate({ to: "/" });
     } catch (e: any) {
       setErr(e.message || "Authentication error");
