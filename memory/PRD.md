@@ -1,69 +1,61 @@
-# Moneta — Portfolio Terminal (PRD)
+# Strategic Markets — PRD
 
 ## Original Problem Statement
-"Prendi il progetto mon-eta da github" — importazione del repository privato `Tatanka977/mon-eta`, esecuzione nell'ambiente Emergent e successivamente "fai tutte le modifiche che ritieni necessarie".
+Clone private GitHub repo `Tatanka977/mon-eta` (branch: main) and expand into a fully functional financial portfolio terminal called **Strategic Markets** with:
+- Real Finnhub market data
+- News feed with filters + AI sentiment
+- MiFID II / SEC compliance disclaimers
+- Fully responsive layout (PC/mobile)
+- Redesigned Home / Portfolio / Risk Analysis pages
+- Full authentication migration from Supabase/Lovable → custom FastAPI + MongoDB + JWT + Google Auth
+
+Language: **Italian** (all responses in Italian).
 
 ## Architecture
-- **Frontend/SSR**: TanStack Start v1.168 (React 19, Vite 7) — full-stack TS, server functions
-- **UI**: Bloomberg-style terminal (font monospace, sfondo nero, accenti blu/giallo)
-- **Auth & DB**: Supabase Cloud (`kyjktigwsjokfqblhqte.supabase.co`) — profiles, portfolios, watchlist, ai_conversations
-- **OAuth**: Lovable cloud auth (Google/Apple) + Supabase email/password
-- **AI Advisor + Sentiment**: FastAPI proxy `/api/ai/chat` (porta 8001) → `emergentintegrations` (Gemini 2.5 Flash via EMERGENT_LLM_KEY)
-- **Market data**: Finnhub (quote stocks + search + news) con fallback mock per CRYPTO/FX/BOND/COMMODITY
+```
+/app/
+├── backend/            # FastAPI (JWT + Google auth + AI + Finnhub proxy)
+│   ├── server.py
+│   └── requirements.txt
+├── src/                # TanStack Start SSR app (real frontend)
+│   ├── components/PortfolioTerminal.tsx  (2200 lines)
+│   ├── hooks/
+│   │   ├── usePersistentState.ts
+│   │   ├── useUser.ts
+│   │   └── useTheme.ts                   (NEW — theme toggle)
+│   ├── routes/
+│   └── styles.css                        (CSS vars for both themes)
+├── frontend/           # Stub for Emergent supervisor template
+├── memory/
+│   ├── PRD.md
+│   └── test_credentials.md
+└── package.json
+```
 
-## Service Topology (Emergent)
-- Supervisor `frontend` → `cd /app && npx vite dev --host 0.0.0.0 --port 3000` (TanStack Start SSR)
-- Supervisor `backend` → uvicorn FastAPI (`/app/backend/server.py`) su 8001 (solo `/api/ai/chat`)
-- Ingress: `/api/*` → 8001, resto → 3000
+## Integrations
+- Finnhub (market data + news) — user API key
+- Emergent LLM Key (Gemini 2.5 Flash) — AI chat + sentiment
+- Emergent Google Auth — social login
+- MongoDB — users, profiles, portfolios
 
-## Key Files (Modified or Created)
-- `/app/.env` — VITE_SUPABASE_*, FINNHUB_API_KEY, EMERGENT_BACKEND_URL, PORT=3000
-- `/app/backend/.env` — EMERGENT_LLM_KEY
-- `/app/backend/server.py` — endpoint `/api/ai/chat` con emergentintegrations Gemini 2.5 Flash
-- `/app/src/lib/ai.functions.ts` — chiama backend Python invece di Lovable AI gateway
-- `/app/src/lib/finance.functions.ts` — Finnhub real per stocks (quote+search) + mock fallback
-- `/app/src/lib/news.functions.ts` — **NUOVO**: `fetchMarketNews` (general/forex/crypto/merger) e `fetchCompanyNews` per ticker
-- `/app/src/components/PortfolioTerminal.tsx` — aggiunta pagina **F6 NEWS**, tab MARKET/HOLDINGS/SYMBOL, bottone `✦ AI SENTIMENT`, `★ ADD TO WATCHLIST` in detail view
-- `/app/vite.config.ts` — `allowedHosts: true`, HMR wss, porta 3000
-- `/app/frontend/package.json` — script `start` delega a vite in /app
+## Completed Features
+- 2025-Q1: Full app migration, Emergent LLM integration, Finnhub, News feed, MiFID compliance
+- 2025-Q1: Custom FastAPI + JWT + MongoDB + Google Auth (Supabase removed)
+- 2025-Q1: Responsive layout + Strategic Markets rebrand
+- 2025-Q1: `usePersistentState` hook to survive Vite HMR reloads
+- 2026-02: **Theme toggle Terminal ↔ Apple Minimal**
+  - `useTheme` hook + localStorage persistence
+  - CSS variables (`--sm-*`) in styles.css for both palettes
+  - Global overrides for font/uppercase/border-radius in Apple mode
+  - Toggle button (iOS-style switch) in top bar with `data-testid="theme-toggle-button"`
 
-## Implementation Status (12 Gen 2026)
+## Known Blockers
+- **P0 — Production deployment fails on Cloud Build.** The app is TanStack Start SSR at `/app` root, but Emergent template deployer expects standard `/app/frontend` Vite/CRA output. Static scan by `deployment_agent` reports PASS but actual `cloud build: build failed`. Recommended path: Save to GitHub → deploy on Vercel/Netlify (native TanStack Start support).
 
-### Iterazione 1 — Setup
-- [x] Clone repo privato via PAT
-- [x] Node 22 installato (richiesto da `@tanstack/react-start@1.168`)
-- [x] npm install (291 pacchetti) + `react-is` per recharts SSR
-- [x] Backend FastAPI espone `/api/ai/chat` → Gemini 2.5 Flash via Emergent LLM key (testato ✅)
-- [x] Frontend TanStack Start SSR su porta 3000 funzionante
-- [x] Finnhub LIVE search (testato AAPL → CDR internazionali reali) 
-
-### Iterazione 3 — Compliance regolamentare (MiFID II / SEC)
-- [x] **System prompt AI** riscritto con vincoli HARD: niente "buy/sell", riformulazione prescrittiva → descrittiva (es. "buy X" → "historically, allocations to X have shown..."), terminazione obbligatoria con BOTTOM LINE + DISCLAIMER
-- [x] **System prompt sentiment news** allineato (osservazioni statistiche, non raccomandazioni)
-- [x] **Messaggio benvenuto AI Advisor** riscritto come "analisi educativa", esplicito "non fornisco raccomandazioni personalizzate"
-- [x] **DisclaimerBar sticky** sopra bottom-nav su tutte le schermate del terminale (giallo, FULL TERMS link)
-- [x] **DisclaimerModal first-visit** con localStorage `moneta_disclaimer_v1` — bottoni ACCETTO E CONTINUO / LEGGI TUTTO
-- [x] **Pagina `/disclaimer`** con 8 sezioni legali in italiano: Natura del Servizio, Assenza di Consulenza Finanziaria, Rischi, Limitazione di Responsabilità, Dati/Cookie, AI Generativa, Consulente Abilitato, Giurisdizione — cita MiFID II, TUF, Reg. UE 2017/565, Securities Act 1933, Securities Exchange Act 1934, OCF, CONSOB
-- [x] **Test compliance**: curl con prompt provocatorio "Devo comprare AAPL? Dammi raccomandazione personalizzata" → AI rifiuta esplicitamente e risponde solo con framework educativo + BOTTOM LINE + DISCLAIMER ✅
-
-### Verifica E2E (screenshot)
-- ✅ Homepage F1 (NO ACTIVE PORTFOLIO + 5 shortcut F2-F6)
-- ✅ Search F2 con Finnhub augmentation (AAPL → 10+ risultati reali)
-- ✅ Detail view stock con quote Finnhub real-time + ADD POSITION + ADD TO WATCHLIST
-- ✅ News F6 — MARKET (30 headlines CNBC/Reuters), SYMBOL NVDA (25 headlines Yahoo)
-- ✅ AI Sentiment analisi multi-headline in italiano con classificazione
-
-## Pending / Backlog
-- [ ] **Supabase migrations**: confermare se SQL in /app/supabase/migrations/ sono state applicate al progetto cloud
-- [ ] **OAuth Lovable**: `@lovable.dev/cloud-auth-js` potrebbe non funzionare fuori dalla sandbox Lovable (email/password sì)
-- [ ] **Crypto/FX live data**: Finnhub free tier non li copre, attualmente mock — potrebbe integrare CoinGecko (gratis) per crypto
-- [ ] **AI streaming**: attualmente sincrono, sarebbe più rapido con SSE
-- [ ] **Watchlist UI dedicata**: i dati vanno in DB ma sono visibili solo dalla pagina profilo
-
-## Test Credentials
-Vedere `/app/memory/test_credentials.md`
-
-## URLs
-- Preview: https://moneta-wallet.preview.emergentagent.com/
-- Backend (interno): http://localhost:8001/api/ai/chat
-- Supabase cloud: https://kyjktigwsjokfqblhqte.supabase.co
+## Backlog / Roadmap
+- P1: Refactor `PortfolioTerminal.tsx` (>2200 lines) into smaller components
+- P1: `testing_agent_v3_fork` full auth flow test (JWT + Google)
+- P2: CoinGecko crypto integration
+- P2: SSE streaming for AI chat
+- P2: Telegram alerts
+- P3: Saved searches, portfolio import/export JSON, market movers, share-portfolio link

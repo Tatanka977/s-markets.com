@@ -24,26 +24,27 @@ import {
 } from "@/lib/profile.functions";
 import { useUser } from "@/hooks/useUser";
 import { usePersistentState } from "@/hooks/usePersistentState";
+import { useTheme } from "@/hooks/useTheme";
 import { Link } from "@tanstack/react-router";
 
 const B = {
-  bg:      "#000000",
-  panel:   "#0A0A0A",
-  panel2:  "#111111",
-  border:  "#2A2A2A",
-  borderB: "#333333",
-  blue:    "#0066FF",
-  blueL:   "#3388FF",
-  blueD:   "#0044CC",
-  white:   "#FFFFFF",
-  yellow:  "#FFFF00",
-  green:   "#00FF00",
-  red:     "#FF3333",
-  cyan:    "#00FFFF",
-  gray1:   "#CCCCCC",
-  gray2:   "#888888",
-  gray3:   "#555555",
-  gray4:   "#333333",
+  bg:      "var(--sm-bg)",
+  panel:   "var(--sm-panel)",
+  panel2:  "var(--sm-panel2)",
+  border:  "var(--sm-border)",
+  borderB: "var(--sm-borderB)",
+  blue:    "var(--sm-blue)",
+  blueL:   "var(--sm-blueL)",
+  blueD:   "var(--sm-blueD)",
+  white:   "var(--sm-white)",
+  yellow:  "var(--sm-yellow)",
+  green:   "var(--sm-green)",
+  red:     "var(--sm-red)",
+  cyan:    "var(--sm-cyan)",
+  gray1:   "var(--sm-gray1)",
+  gray2:   "var(--sm-gray2)",
+  gray3:   "var(--sm-gray3)",
+  gray4:   "var(--sm-gray4)",
 };
 const SERIES_COLS = ["#0066FF","#00FF00","#FFFF00","#00FFFF","#FF3333","#FF00FF","#FF8800","#AAAAAA","#66CCFF","#88FF88"];
 const PIE_COLS    = SERIES_COLS;
@@ -211,6 +212,8 @@ function PhoneShell({children}:any) {
 
 function TopBar({time}:any) {
   const { user } = useUser();
+  const [theme, , toggleTheme] = useTheme();
+  const isApple = theme === "apple";
   return (
     <div className="sm-topbar" style={{background:B.blue,display:"flex",alignItems:"center",
       justifyContent:"space-between",padding:"6px 12px",flexShrink:0,gap:8,flexWrap:"wrap"}}>
@@ -226,6 +229,30 @@ function TopBar({time}:any) {
         <span style={{fontSize:12,color:B.yellow,fontFamily:"'Courier New',monospace",
           fontWeight:700,letterSpacing:"0.06em"}}>● LIVE</span>
         <span style={{fontSize:12,color:B.white,fontFamily:"'Courier New',monospace",opacity:0.85}}>{time}</span>
+        <button
+          data-testid="theme-toggle-button"
+          onClick={toggleTheme}
+          title={isApple ? "Switch to Terminal theme" : "Switch to Apple Minimal theme"}
+          aria-label="Toggle theme"
+          style={{
+            fontSize:11,fontWeight:700,color:B.white,fontFamily:"'Courier New',monospace",
+            background:"rgba(0,0,0,0.25)",border:"1px solid rgba(255,255,255,0.4)",
+            padding:"3px 8px",letterSpacing:"0.08em",cursor:"pointer",
+            display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",
+          }}
+        >
+          <span style={{
+            display:"inline-block",width:22,height:12,borderRadius:12,
+            background:isApple?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.25)",
+            position:"relative",transition:"background 0.2s",
+          }}>
+            <span style={{
+              position:"absolute",top:1,left:isApple?11:1,width:10,height:10,borderRadius:"50%",
+              background:isApple?B.blue:B.white,transition:"left 0.2s",
+            }}/>
+          </span>
+          <span>{isApple ? "APPLE" : "TERMINAL"}</span>
+        </button>
         <Link to={user ? "/profile" : "/auth"} style={{
           fontSize:12,fontWeight:700,color:B.white,fontFamily:"'Courier New',monospace",
           textDecoration:"none",background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.4)",

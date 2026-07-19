@@ -142,3 +142,116 @@
     color: var(--color-foreground);
   }
 }
+
+/* ==========================================================================
+ * Strategic Markets — Theme System
+ *
+ * Two themes, applied via data-theme on <html>:
+ *   [data-theme="terminal"] (default) — Bloomberg-style, dark, monospace
+ *   [data-theme="apple"] — Apple-minimal, light, system font, soft radius
+ *
+ * The inline styles in PortfolioTerminal.tsx reference var(--sm-*)
+ * so switching data-theme retints the entire UI without touching any JSX.
+ * ========================================================================== */
+
+:root,
+[data-theme="terminal"] {
+  --sm-bg:      #000000;
+  --sm-panel:   #0A0A0A;
+  --sm-panel2:  #111111;
+  --sm-border:  #2A2A2A;
+  --sm-borderB: #333333;
+  --sm-blue:    #0066FF;
+  --sm-blueL:   #3388FF;
+  --sm-blueD:   #0044CC;
+  --sm-white:   #FFFFFF;
+  --sm-yellow:  #FFFF00;
+  --sm-green:   #00FF00;
+  --sm-red:     #FF3333;
+  --sm-cyan:    #00FFFF;
+  --sm-gray1:   #CCCCCC;
+  --sm-gray2:   #888888;
+  --sm-gray3:   #555555;
+  --sm-gray4:   #333333;
+  --sm-font:    'Courier New', Courier, monospace;
+  --sm-radius:  0px;
+  --sm-radius-lg: 0px;
+  --sm-shadow:  none;
+  --sm-text-transform: uppercase;
+  --sm-letter-spacing: 0.05em;
+}
+
+[data-theme="apple"] {
+  /* Apple-minimal palette (SF-inspired: white base, blue accent, near-black text) */
+  --sm-bg:      #F5F5F7;
+  --sm-panel:   #FFFFFF;
+  --sm-panel2:  #FAFAFC;
+  --sm-border:  #E5E5EA;
+  --sm-borderB: #D1D1D6;
+  --sm-blue:    #0071E3;
+  --sm-blueL:   #2B8AF0;
+  --sm-blueD:   #0051A8;
+  --sm-white:   #FFFFFF;
+  --sm-yellow:  #B45309;
+  --sm-green:   #30A46C;
+  --sm-red:     #E5484D;
+  --sm-cyan:    #0891B2;
+  --sm-gray1:   #1D1D1F;
+  --sm-gray2:   #6E6E73;
+  --sm-gray3:   #86868B;
+  --sm-gray4:   #D2D2D7;
+  --sm-font:    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --sm-radius:  12px;
+  --sm-radius-lg: 16px;
+  --sm-shadow:  0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+  --sm-text-transform: none;
+  --sm-letter-spacing: -0.01em;
+}
+
+/* Apply the chosen font family to every element in the terminal.
+ * We scope to descendants of [data-theme] so it applies once <html data-theme="apple"> is set. */
+[data-theme="apple"] body,
+[data-theme="apple"] input,
+[data-theme="apple"] button,
+[data-theme="apple"] textarea,
+[data-theme="apple"] select,
+[data-theme="apple"] div,
+[data-theme="apple"] span,
+[data-theme="apple"] a,
+[data-theme="apple"] p,
+[data-theme="apple"] h1,
+[data-theme="apple"] h2,
+[data-theme="apple"] h3,
+[data-theme="apple"] h4,
+[data-theme="apple"] h5,
+[data-theme="apple"] h6 {
+  font-family: var(--sm-font) !important;
+  letter-spacing: var(--sm-letter-spacing) !important;
+}
+
+/* Soften the aggressive uppercase / letter-spacing typical of the terminal look */
+[data-theme="apple"] [style*="text-transform:uppercase"],
+[data-theme="apple"] [style*="text-transform: uppercase"] {
+  text-transform: none !important;
+}
+
+/* Give panels and buttons rounded corners when in Apple mode.
+ * We target inline "border-radius:0" style attributes that dominate the terminal. */
+[data-theme="apple"] [style*="border-radius:0"],
+[data-theme="apple"] [style*="border-radius: 0"] {
+  border-radius: var(--sm-radius) !important;
+}
+
+/* Soften scrollbars for Apple mode */
+[data-theme="apple"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+[data-theme="apple"] ::-webkit-scrollbar-thumb { background: #D1D1D6; border-radius: 8px; }
+[data-theme="apple"] ::-webkit-scrollbar-thumb:hover { background: #B0B0B5; }
+[data-theme="apple"] ::-webkit-scrollbar-track { background: transparent; }
+
+/* Subtle card elevation for Apple mode panels (uses attribute selector) */
+[data-theme="apple"] [style*="background:#0A0A0A"],
+[data-theme="apple"] [style*="background: #0A0A0A"],
+[data-theme="apple"] [style*="background:var(--sm-panel)"],
+[data-theme="apple"] [style*="background: var(--sm-panel)"] {
+  box-shadow: var(--sm-shadow);
+}
