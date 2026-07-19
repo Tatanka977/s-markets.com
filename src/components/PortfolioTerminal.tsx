@@ -20,6 +20,8 @@ import {
 } from "@/lib/news.functions";
 import {
   savePortfolio,
+  listPortfolios,
+  deletePortfolio,
   saveConversation,
   addToWatchlist as srvAddWatch,
 } from "@/lib/profile.functions";
@@ -817,12 +819,109 @@ function SearchPage({onAdd,portfolio}:any) {
   );
 }
 
-function PortfolioPage({holdings,onRemove}:any) {
+function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
   const m=useMemo(()=>pMet(holdings),[holdings]);
+  const { user } = useUser();
+  const [view, setView] = useState<"positions"|"saved">("positions");
+  const [savedList, setSavedList] = useState<any[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+
+  const loadSaved = useCallback(async () => {
+    setLoadingSaved(true);
+    try {
+      const list = await listPortfolios();
+      setSavedList(list || []);
+    } catch (e:any) {
+      console.warn("[Strategic Markets] listPortfolios failed:", e.message);
+    } finally {
+      setLoadingSaved(false);
+    }
+  }, []);
+
+  useEffect(() => { if (view === "saved") loadSaved(); }, [view, loadSaved]);
+
+  const handleDelete = async (id:string) => {
+    if (!confirm("Delete this saved portfolio?")) return;
+    try {
+      await deletePortfolio({ data: { id } });
+      setSavedList(prev => prev.filter(p => p.id !== id));
+    } catch (e:any) { alert("Error: " + e.message); }
+  };
+
+  const handleLoad = (p:any) => {
+    onLoadPortfolio(p.holdings);
+    setView("positions");
+  };
+
+  const TabBar = (
+    <div style={{display:"flex",borderBottom:`1px solid ${B.border}`,flexShrink:0}}>
+      {(["positions","saved"] as const).map(v=>(
+        <button key={v} onClick={()=>setView(v)} style={{
+          flex:1,padding:"8px 4px",
+          background:view===v?B.blue:"transparent",
+          color:view===v?B.white:B.gray2,
+          border:"none",fontFamily:"'Courier New',monospace",
+          fontSize:12,fontWeight:700,letterSpacing:"0.08em",cursor:"pointer",
+        }}>
+          {v==="positions"?"POSITIONS":"SAVED PORTFOLIOS"}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (view === "saved") {
+    return (
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {TabBar}
+        <div style={{flex:1,overflowY:"auto",background:B.bg}}>
+          {!user ? (
+            <div style={{padding:"20px 12px",textAlign:"center"}}>
+              <div style={{fontSize:13,color:B.gray2,fontFamily:"'Courier New',monospace",marginBottom:12}}>
+                SIGN IN TO VIEW SAVED PORTFOLIOS
+              </div>
+              <Link to="/auth" style={{fontSize:13,color:B.blue,fontFamily:"'Courier New',monospace",textDecoration:"underline"}}>
+                → SIGN IN
+              </Link>
+            </div>
+          ) : loadingSaved ? (
+            <div style={{padding:"20px 12px",textAlign:"center",color:B.gray3,fontFamily:"'Courier New',monospace",fontSize:13}}>
+              LOADING...
+            </div>
+          ) : !savedList.length ? (
+            <div style={{padding:"20px 12px",textAlign:"center",color:B.gray3,fontFamily:"'Courier New',monospace",fontSize:13,lineHeight:1.8}}>
+              NO SAVED PORTFOLIOS YET<br/>GO TO POSITIONS AND TAP SAVE
+            </div>
+          ) : (
+            savedList.map((p:any) => (
+              <div key={p.id} onClick={()=>handleLoad(p)} style={{
+                background:B.panel,borderBottom:`1px solid ${B.border}`,padding:"10px 12px",
+                cursor:"pointer",fontFamily:"'Courier New',monospace",
+              }}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:15,color:B.blue,fontWeight:700}}>{p.name}</span>
+                  <button onClick={(e)=>{e.stopPropagation();handleDelete(p.id);}} style={{
+                    background:"transparent",border:`1px solid ${B.gray4}`,color:B.gray3,
+                    cursor:"pointer",fontSize:11,padding:"1px 6px",
+                  }}>✕</button>
+                </div>
+                <div style={{fontSize:11,color:B.gray2,marginTop:4}}>
+                  {(p.holdings||[]).length} SECURITIES · UPDATED {new Date(p.updated_at).toLocaleDateString()}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (!holdings.length) return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
-      <div style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center",lineHeight:1.8}}>
-        NO SECURITIES IN PORTFOLIO<br/>USE SEARCH TO ADD LIVE POSITIONS
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      {TabBar}
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
+        <div style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center",lineHeight:1.8}}>
+          NO SECURITIES IN PORTFOLIO<br/>USE SEARCH TO ADD LIVE POSITIONS
+        </div>
       </div>
     </div>
   );
@@ -832,6 +931,7 @@ function PortfolioPage({holdings,onRemove}:any) {
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      {TabBar}
       {/* KPI Summary Bar */}
       <div style={{background:"linear-gradient(180deg, "+B.blue+" 0%, #0044AA 100%)",
         display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",
@@ -2148,7 +2248,7 @@ export default function PortfolioTerminal() {
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
             {page==="home"       && <HomePage     holdings={holdings} setPage={setPage} onRefresh={refreshPrices} refreshing={refreshing}/>}
             {page==="search"     && <SearchPage   onAdd={addToPortfolio} portfolio={holdings}/>}
-            {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio}/>}
+            {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio} onLoadPortfolio={setHoldings}/>}
             {page==="analysis"   && <AnalysisPage  holdings={holdings}/>}
             {page==="ai"         && <AIAdvisorPage holdings={holdings}/>}
             {page==="news"       && <NewsPage holdings={holdings} setPage={setPage}/>}
