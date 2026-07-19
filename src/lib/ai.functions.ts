@@ -23,9 +23,18 @@ export const aiChat = createServerFn({ method: "POST" })
         parts: [{ text: m.content }],
       }));
 
+    const today = new Date().toLocaleDateString("it-IT", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const systemWithDate = `${data.system}\n\nOggi è ${today}. Usa sempre questa data come riferimento per qualsiasi domanda relativa al tempo, non fare assunzioni basate su altre date.`;
+
     const body = {
       contents,
-      systemInstruction: { parts: [{ text: data.system }] },
+      systemInstruction: { parts: [{ text: systemWithDate }] },
     };
 
     const r = await fetch(url, {
