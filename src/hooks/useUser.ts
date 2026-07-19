@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface AppUser {
   user_id: string;
@@ -8,16 +9,15 @@ export interface AppUser {
   provider: string;
 }
 
-const API = (import.meta as any).env?.VITE_BACKEND_URL || "";
-
-async function fetchMe(): Promise<AppUser | null> {
-  try {
-    const r = await fetch(`${API}/api/auth/me`, { credentials: "include" });
-    if (!r.ok) return null;
-    return (await r.json()) as AppUser;
-  } catch {
-    return null;
-  }
+function mapSupabaseUser(u: any): AppUser | null {
+  if (!u) return null;
+  return {
+    user_id: u.id,
+    email: u.email || "",
+    name: u.user_metadata?.name || u.email?.split("@")[0] || "",
+    picture: u.user_metadata?.picture || u.user_metadata?.avatar_url || null,
+    provider: u.app_metadata?.provider || "email",
+  };
 }
 
 export function useUser() {
@@ -26,25 +26,25 @@ export function useUser() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const u = await fetchMe();
-    setUser(u);
+    const { data } = await supabase.auth.getSession();
+    setUser(mapSupabaseUser(data.session?.user));
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    // If we are handling an OAuth callback, skip /me — root layout will
-    // exchange the session_id first.
-    if (typeof window !== "undefined" && window.location.hash?.includes("session_id=")) {
-      setLoading(false);
-      return;
-    }
     refresh();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(mapSupabaseUser(session?.user));
+    });
+
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
   }, [refresh]);
 
   const logout = useCallback(async () => {
-    try {
-      await fetch(`${API}/api/auth/logout`, { method: "POST", credentials: "include" });
-    } catch {}
+    await supabase.auth.signOut();
     setUser(null);
   }, []);
 
