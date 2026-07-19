@@ -213,7 +213,7 @@ function PhoneShell({children}:any) {
 function TopBar({time}:any) {
   const { user } = useUser();
   const [theme, , toggleTheme] = useTheme();
-  const isApple = theme === "apple";
+  const isAurora = theme === "aurora";
   return (
     <div className="sm-topbar" style={{background:B.blue,display:"flex",alignItems:"center",
       justifyContent:"space-between",padding:"6px 12px",flexShrink:0,gap:8,flexWrap:"wrap"}}>
@@ -232,7 +232,7 @@ function TopBar({time}:any) {
         <button
           data-testid="theme-toggle-button"
           onClick={toggleTheme}
-          title={isApple ? "Switch to Terminal theme" : "Switch to Apple Minimal theme"}
+          title={isAurora ? "Switch to Terminal theme" : "Switch to Aurora theme"}
           aria-label="Toggle theme"
           style={{
             fontSize:11,fontWeight:700,color:B.white,fontFamily:"'Courier New',monospace",
@@ -243,15 +243,15 @@ function TopBar({time}:any) {
         >
           <span style={{
             display:"inline-block",width:22,height:12,borderRadius:12,
-            background:isApple?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.25)",
+            background:isAurora?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.25)",
             position:"relative",transition:"background 0.2s",
           }}>
             <span style={{
-              position:"absolute",top:1,left:isApple?11:1,width:10,height:10,borderRadius:"50%",
-              background:isApple?B.blue:B.white,transition:"left 0.2s",
+              position:"absolute",top:1,left:isAurora?11:1,width:10,height:10,borderRadius:"50%",
+              background:isAurora?B.blue:B.white,transition:"left 0.2s",
             }}/>
           </span>
-          <span>{isApple ? "APPLE" : "TERMINAL"}</span>
+          <span>{isAurora ? "AURORA" : "TERMINAL"}</span>
         </button>
         <Link to={user ? "/profile" : "/auth"} style={{
           fontSize:12,fontWeight:700,color:B.white,fontFamily:"'Courier New',monospace",

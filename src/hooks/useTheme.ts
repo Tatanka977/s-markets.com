@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export type SMTheme = "terminal" | "apple";
+export type SMTheme = "terminal" | "aurora";
 
 const STORAGE_KEY = "moneta_sm_theme";
 
@@ -8,7 +8,7 @@ function readInitial(): SMTheme {
   if (typeof window === "undefined") return "terminal";
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw === "apple" || raw === "terminal") return raw;
+    if (raw === "aurora" || raw === "terminal") return raw;
   } catch {
     // ignore
   }
@@ -44,7 +44,7 @@ export function useTheme(): [SMTheme, (t: SMTheme) => void, () => void] {
   }, [theme]);
 
   const setTheme = (t: SMTheme) => setThemeState(t);
-  const toggle = () => setThemeState((t) => (t === "terminal" ? "apple" : "terminal"));
+  const toggle = () => setThemeState((t) => (t === "terminal" ? "aurora" : "terminal"));
 
   return [theme, setTheme, toggle];
 }

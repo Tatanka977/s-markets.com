@@ -43,10 +43,12 @@ Language: **Italian** (all responses in Italian).
 - 2025-Q1: Custom FastAPI + JWT + MongoDB + Google Auth (Supabase removed)
 - 2025-Q1: Responsive layout + Strategic Markets rebrand
 - 2025-Q1: `usePersistentState` hook to survive Vite HMR reloads
-- 2026-02: **Theme toggle Terminal ↔ Apple Minimal**
-  - `useTheme` hook + localStorage persistence
+- 2026-02: **Theme toggle Terminal ↔ Aurora**
+  - Terminal (default) = Bloomberg dark/monospace
+  - Aurora = modern fintech-minimal light theme, blue #2C5FEB accent, radius 16px, system font
+  - `useTheme` hook + localStorage persistence (`moneta_sm_theme`)
   - CSS variables (`--sm-*`) in styles.css for both palettes
-  - Global overrides for font/uppercase/border-radius in Apple mode
+  - Global overrides for font/uppercase/border-radius/buttons in Aurora mode
   - Toggle button (iOS-style switch) in top bar with `data-testid="theme-toggle-button"`
 
 ## Known Blockers
