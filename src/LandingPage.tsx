@@ -54,24 +54,21 @@ export default function LandingPage() {
             <div className="stats">
 
               <div>
-                <h2>50K+</h2>
-                <span>Investors</span>
+                <h2>7+</h2>
+                <span>Asset classes covered</span>
               </div>
 
               <div>
-                <h2>$100M+</h2>
-                <span>Assets analyzed</span>
+                <h2>Free</h2>
+                <span>To get started</span>
               </div>
 
               <div>
-                <h2>99.9%</h2>
-                <span>Platform uptime</span>
+                <h2>AI</h2>
+                <span>Portfolio insights</span>
               </div>
 
             </div>
-
-          </div>
-
 
           <div className="hero-card">
 
