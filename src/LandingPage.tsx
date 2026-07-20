@@ -69,6 +69,8 @@ export default function LandingPage() {
 
             </div>
 
+          </div>
+
           <div className="hero-card">
 
             <div className="terminal">
