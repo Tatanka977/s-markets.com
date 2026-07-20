@@ -541,7 +541,7 @@ function HomePage({holdings,setPage,onRefresh,refreshing}:any) {
 }
 
 function SearchPage({onAdd,portfolio}:any) {
-  const [q,setQ]         = usePersistentState<string>("search_q", "");
+  const [q,setQ] = useState<string>("");
   const [results,setRes] = useState<any[]>([]);
   const [searching,setSrch]=useState(false);
   const [sel,setSel]     = usePersistentState<any>("search_sel", null);
