@@ -70,13 +70,24 @@ type Holding = {
 };
 
 const groupBy = (
-  arr: Holding[],
+  arr: any[],
   key: string,
   total: number
 ) => {
-  const m={};
-  arr.forEach(h=>{ const k=h.asset[key]||"N/A"; m[k]=(m[k]||0)+h.value; });
-  return Object.entries(m).map(([name,value])=>({name,value,pct:+(value/total*100).toFixed(1)})).sort((a,b)=>b.value-a.value);
+  const m: Record<string, number> = {};
+
+  arr.forEach((h: any) => {
+    const k = h.asset[key] || "N/A";
+    m[k] = (m[k] || 0) + h.value;
+  });
+
+  return Object.entries(m)
+    .map(([name, value]) => ({
+      name,
+      value: Number(value),
+      pct: +(Number(value) / total * 100).toFixed(1)
+    }))
+    .sort((a, b) => b.value - a.value);
 };
 const pMet = (hs: Holding[]) => {
   if (!hs.length) return null;
@@ -97,8 +108,8 @@ const searchSecurities = (q: string, category?: string) => srvSearch({ data: { q
 const fetchQuote = (sym: string) => srvQuote({ data: { symbol: sym } });
 const batchRefresh = (symbols: string[]) => srvBatch({ data: { symbols } });
 const fetchMarketStatus = (exchanges?:string[]) => srvMarketStatus({ data: { exchanges } });
-const fetchHistoricalPrice = (symbol: string, date: string) => srvHistorical({ data: { symbol, date } });
-const fetchMarketNews = (category?: string) => srvMarketNews({ data: { category } });
+const fetchHistoricalPrice = (symbol:string, date:number) => srvHistorical({ data: { symbol, date } });
+const fetchMarketNews = (category:string) => srvMarketNews({ data: { category } });
 const fetchCompanyNews = (symbol: string, days = 14) => srvCompanyNews({ data: { symbol, days } });
 
 const CATEGORY_TABS = [
