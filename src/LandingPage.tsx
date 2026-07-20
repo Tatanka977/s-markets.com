@@ -12,13 +12,6 @@ export default function LandingPage() {
             Strategic Markets
           </div>
 
-          <nav>
-            <a href="#home">Home</a>
-            <a href="#features">Features</a>
-            <a href="#how">How it works</a>
-            <a href="#about">About</a>
-          </nav>
-
           <a className="btn btn-primary" href="/terminal">
             Open Terminal
           </a>
