@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
