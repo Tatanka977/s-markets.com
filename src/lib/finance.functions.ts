@@ -437,7 +437,27 @@ export interface HistoricalPrice {
   actualDate: string | null; // trading day actually used (YYYY-MM-DD)
   reason?: string;           // populated when price is null
 }
+interface YahooChartResult {
+  chart?: {
+    result?: Array<{ meta: { regularMarketPrice?: number; currency?: string } }>;
+    error?: unknown;
+  };
+}
 
+async function fetchYahooQuote(symbol: string): Promise<{ price: number; currency: string } | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`;
+  try {
+    const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (StrategicMarkets)" } });
+    if (!r.ok) return null;
+    const j = (await r.json()) as YahooChartResult;
+    const meta = j.chart?.result?.[0]?.meta;
+    if (!meta?.regularMarketPrice) return null;
+    return { price: meta.regularMarketPrice, currency: meta.currency || "USD" };
+  } catch (e) {
+    console.warn("[Yahoo quote] error:", (e as Error).message);
+    return null;
+  }
+}
 /** Convert 'YYYY-MM-DD' → unix seconds at 00:00 UTC. */
 function ymdToUnix(ymd: string): number {
   const [y, m, d] = ymd.split("-").map(Number);
