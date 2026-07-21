@@ -12,6 +12,7 @@ import {
   batchRefresh as srvBatch,
   fetchMarketStatus as srvMarketStatus,
   fetchHistoricalPrice as srvHistorical,
+  fetchFxRates as srvFx,
 } from "@/lib/finance.functions";
 import { aiChat } from "@/lib/ai.functions";
 import {
