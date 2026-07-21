@@ -820,7 +820,10 @@ useEffect(()=>{
     </div>
   );
 }
-
+const converted = useMemo(
+  () => holdings.map((h:any) => ({ ...h, value: toDisplay(h.value, h.asset.currency) })),
+  [holdings, displayCcy, fx]
+);
 function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
   const m=useMemo(()=>pMet(converted),[converted]);
   const [displayCcy, setDisplayCcy] = usePersistentState<"USD"|"EUR">("display_ccy","USD");
@@ -854,10 +857,6 @@ const toDisplay = (value:number, nativeCcy?:string|null) => {
   return displayCcy === "USD" ? usd : usd / eurUsd;
 };
 
-const converted = useMemo(
-  () => holdings.map((h:any) => ({ ...h, value: toDisplay(h.value, h.asset.currency) })),
-  [holdings, displayCcy, fx]
-);
   const { user } = useUser();
   const [view, setView] = useState<"positions"|"saved">("positions");
   const [savedList, setSavedList] = useState<any[]>([]);
