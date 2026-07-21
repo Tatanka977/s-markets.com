@@ -823,6 +823,41 @@ useEffect(()=>{
 
 function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
   const m=useMemo(()=>pMet(holdings),[holdings]);
+  const [displayCcy, setDisplayCcy] = usePersistentState<"USD"|"EUR">("display_ccy","USD");
+const [fx, setFx] = useState<{EURUSD:number|null;GBPUSD:number|null;fetchedAt:number|null}>({
+  EURUSD: null, GBPUSD: null, fetchedAt: null,
+});
+
+const loadFx = useCallback(() => {
+  srvFx({}).then(setFx).catch(()=>{
+    console.warn("[FX] Yahoo fetch failed, keeping last known rates");
+  });
+}, []);
+
+useEffect(() => {
+  loadFx();
+  const interval = setInterval(loadFx, 60_000);
+  return () => clearInterval(interval);
+}, [loadFx]);
+
+const FALLBACK_FX = { EURUSD: 1.08, GBPUSD: 1.27 };
+const CCY_SYMBOL: Record<string,string> = { USD:"$", EUR:"€", GBP:"£", CHF:"CHF ", JPY:"¥" };
+const ccySym = (c?:string|null) => CCY_SYMBOL[(c||"USD").toUpperCase()] || `${c||""} `;
+
+const toDisplay = (value:number, nativeCcy?:string|null) => {
+  const ccy = (nativeCcy||"USD").toUpperCase();
+  const eurUsd = fx.EURUSD ?? FALLBACK_FX.EURUSD;
+  const gbpUsd = fx.GBPUSD ?? FALLBACK_FX.GBPUSD;
+  let usd = value;
+  if (ccy === "EUR") usd = value * eurUsd;
+  else if (ccy === "GBP") usd = value * gbpUsd;
+  return displayCcy === "USD" ? usd : usd / eurUsd;
+};
+
+const converted = useMemo(
+  () => holdings.map((h:any) => ({ ...h, value: toDisplay(h.value, h.asset.currency) })),
+  [holdings, displayCcy, fx]
+);
   const { user } = useUser();
   const [view, setView] = useState<"positions"|"saved">("positions");
   const [savedList, setSavedList] = useState<any[]>([]);
