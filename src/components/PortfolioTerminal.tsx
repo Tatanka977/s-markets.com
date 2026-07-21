@@ -1047,8 +1047,8 @@ const converted = useMemo(
               <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
                 <div>
                   <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>PRICE</div>
-                  <div style={{fontSize:15,color:B.yellow,fontWeight:700}}>{ccySym(displayCcy)}{fmtM(h.value)}</div>
-                    {h.asset.price!=null ? h.asset.price.toLocaleString(undefined,{maximumFractionDigits:2}) : "---"}
+                  <div style={{fontSize:15,color:B.yellow,fontWeight:700}}>
+                    {h.asset.price!=null ? `${ccySym(h.asset.currency)}${h.asset.price.toLocaleString(undefined,{maximumFractionDigits:2})}` : "---"}
                   </div>
                 </div>
                 <div style={{
@@ -1064,7 +1064,7 @@ const converted = useMemo(
                 </div>
                 <div style={{marginLeft:"auto",textAlign:"right"}}>
                   <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>MKT VALUE</div>
-                  <div style={{fontSize:15,color:B.yellow,fontWeight:700}}>${fmtM(h.value)}</div>
+                  <div style={{fontSize:15,color:B.yellow,fontWeight:700}}>{ccySym(displayCcy)}{fmtM(h.value)}</div>
                 </div>
                 <div style={{textAlign:"right",minWidth:64}}>
                   <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>WEIGHT</div>
