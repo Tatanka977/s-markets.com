@@ -576,3 +576,14 @@ export const fetchHistoricalPrice = createServerFn({ method: "GET" })
       reason: "no historical data available for this symbol/date",
     };
   });
+export const fetchFxRates = createServerFn({ method: "GET" }).handler(async () => {
+  const [eurUsd, gbpUsd] = await Promise.all([
+    fetchYahooQuote("EURUSD=X"),
+    fetchYahooQuote("GBPUSD=X"),
+  ]);
+  return {
+    EURUSD: eurUsd?.price ?? null,
+    GBPUSD: gbpUsd?.price ?? null,
+    fetchedAt: Date.now(),
+  };
+});
