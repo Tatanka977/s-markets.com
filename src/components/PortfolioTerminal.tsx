@@ -822,7 +822,7 @@ useEffect(()=>{
 }
 
 function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
-  const m=useMemo(()=>pMet(holdings),[holdings]);
+  const m=useMemo(()=>pMet(converted),[converted]);
   const [displayCcy, setDisplayCcy] = usePersistentState<"USD"|"EUR">("display_ccy","USD");
 const [fx, setFx] = useState<{EURUSD:number|null;GBPUSD:number|null;fetchedAt:number|null}>({
   EURUSD: null, GBPUSD: null, fetchedAt: null,
@@ -964,7 +964,7 @@ const converted = useMemo(
   );
 
   // Sort by market value desc for visual hierarchy
-  const sorted = [...holdings].sort((a:any,b:any) => (b.value ?? 0) - (a.value ?? 0));
+  const sorted = [...converted].sort((a:any,b:any) => (b.value ?? 0) - (a.value ?? 0));
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -974,7 +974,7 @@ const converted = useMemo(
         display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",
         gap:1, flexShrink:0, padding:1}}>
         {[
-          {l:"TOTAL VALUE",v:`$${fmtM(m.total)}`,ic:"$"},
+          {l:"TOTAL VALUE",v:`${ccySym(displayCcy)}${fmtM(m.total)}`,ic:"$"},
           {l:"EXPECTED RETURN",   v:`${pSign(fmt(m.wRet,1))}%`,ic:"↗"},
           {l:"VOLATILITY",v:`${fmt(m.wVol,1)}%`,ic:"σ"},
           {l:"SHARPE RATIO",    v:fmt(m.sharpe,2),ic:"S"},
@@ -987,7 +987,18 @@ const converted = useMemo(
           </div>
         ))}
       </div>
-
+<div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,padding:"4px 10px",background:B.panel2}}>
+  <span style={{fontSize:9,color:fx.EURUSD!=null?B.cyan:B.gray3}}>
+    {fx.EURUSD!=null ? "● LIVE FX" : "○ FX UNAVAILABLE"}
+  </span>
+  {(["USD","EUR"] as const).map(c=>(
+    <button key={c} onClick={()=>setDisplayCcy(c)} style={{
+      padding:"3px 10px",fontSize:11,fontFamily:"'Courier New',monospace",fontWeight:700,
+      background:displayCcy===c?B.blue:"transparent",color:displayCcy===c?B.white:B.gray2,
+      border:`1px solid ${B.border}`,cursor:"pointer",letterSpacing:"0.06em",
+    }}>{c}</button>
+  ))}
+</div>
       {/* Position count + total */}
       <div style={{padding:"5px 10px",background:B.panel2,borderBottom:`1px solid ${B.border}`,
         display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
@@ -1036,7 +1047,7 @@ const converted = useMemo(
               <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
                 <div>
                   <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>PRICE</div>
-                  <div style={{fontSize:15,color:B.yellow,fontWeight:700,letterSpacing:"-0.02em"}}>
+                  <div style={{fontSize:15,color:B.yellow,fontWeight:700}}>{ccySym(displayCcy)}{fmtM(h.value)}</div>
                     {h.asset.price!=null ? h.asset.price.toLocaleString(undefined,{maximumFractionDigits:2}) : "---"}
                   </div>
                 </div>
