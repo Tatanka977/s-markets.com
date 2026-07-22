@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import {
   B, fmt, fmtM, pCol, pSign, groupBy, pMet, PIE_COLS,
   BPanel, FKey, computeAlerts, SEV_STYLE,
-} from "./PortfolioTerminal";
+} from "@/lib/uiShared";
 import { aiChat } from "@/lib/ai.functions";
 import { getInvestorProfile } from "@/lib/profile.functions";
 
