@@ -243,64 +243,80 @@ function inferCategoryFromType(t: string): Category | undefined {
   if (u.includes("COMMON") || u.includes("EQUITY") || u.includes("STOCK")) return "STOCK";
   return "STOCK";
 }
+interface YahooSearchQuote {
+  symbol: string; shortname?: string; longname?: string;
+  exchDisp?: string; typeDisp?: string; quoteType?: string;
+}
+interface YahooSearchResponse { quotes?: YahooSearchQuote[] }
 
+async function searchYahoo(query: string): Promise<SearchResult[]> {
+  const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=25&newsCount=0`;
+  try {
+    const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (StrategicMarkets)" } });
+    if (!r.ok) return [];
+    const j = (await r.json()) as YahooSearchResponse;
+    return (j.quotes || []).filter(q => q.symbol).map(q => ({
+      symbol: q.symbol,
+      shortName: q.shortname || q.longname || q.symbol,
+      exchange: q.exchDisp || "—",
+      type: q.typeDisp || q.quoteType || "Equity",
+      category: inferCategoryFromType(q.quoteType || q.typeDisp || ""),
+    }));
+  } catch (e) {
+    console.warn("[Yahoo search]", (e as Error).message);
+    return [];
+  }
+}
+
+interface OpenFigiResult {
+  data?: Array<{ ticker?: string; name?: string; exchCode?: string; securityType?: string; marketSector?: string }>;
+}
+
+function isIsin(q: string): boolean {
+  return /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(q.trim().toUpperCase());
+}
+
+async function searchByIsin(isin: string): Promise<SearchResult[]> {
+  try {
+    const r = await fetch("https://api.openfigi.com/v3/mapping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([{ idType: "ID_ISIN", idValue: isin.toUpperCase() }]),
+    });
+    if (!r.ok) return [];
+    const json = (await r.json()) as OpenFigiResult[];
+    const entries = json[0]?.data || [];
+    return entries.filter(e => e.ticker).map(e => ({
+      symbol: e.ticker!,
+      shortName: e.name || e.ticker!,
+      exchange: e.exchCode || "—",
+      type: e.securityType || "Equity",
+      category: inferCategoryFromType(e.securityType || e.marketSector || ""),
+    }));
+  } catch (e) {
+    console.warn("[OpenFIGI]", (e as Error).message);
+    return [];
+  }
+}
 export const searchSecurities = createServerFn({ method: "GET" })
   .inputValidator((d: { q: string; category?: Category }) => d)
   .handler(async ({ data }) => {
     const q = (data.q || "").trim();
-    const cat = data.category;
+    if (!q) return [];
 
-    // Always include mock matches (multi-asset coverage Finnhub free tier doesn't have)
-    const ql = q.toLowerCase();
-    let mockPool = MOCK_UNIVERSE;
-    if (cat) mockPool = mockPool.filter((m) => m.category === cat);
-    const mockMatches = ql
-      ? mockPool.filter(
-          (m) =>
-            m.symbol.toLowerCase().includes(ql) ||
-            (m.ticker || "").toLowerCase().includes(ql) ||
-            m.shortName.toLowerCase().includes(ql)
-        )
-      : mockPool;
-
-    const out: SearchResult[] = mockMatches.map((m) => ({
-      symbol: m.symbol,
-      shortName: m.shortName,
-      exchange: m.exchange || "US",
-      type: m.type || "Equity",
-      category: m.category,
-      sector: m.industry,
-      industry: m.industry,
-      geo: m.geo,
-    }));
-
-    // Augment with Finnhub /search (US stocks coverage) when available
-    if (q && hasFinnhub()) {
-      try {
-        const res = await fh<FhSearch>(`/search?q=${encodeURIComponent(q)}`);
-        const seen = new Set(out.map((o) => o.symbol.toUpperCase()));
-        for (const r of (res?.result || []).slice(0, 25)) {
-          const sym = (r.symbol || "").toUpperCase();
-          if (!sym || seen.has(sym)) continue;
-          const inferred = inferCategoryFromType(r.type);
-          if (cat && inferred !== cat) continue;
-          seen.add(sym);
-          out.push({
-            symbol: sym,
-            shortName: r.description || sym,
-            exchange: r.displaySymbol?.includes(":") ? r.displaySymbol.split(":")[0] : "US",
-            type: r.type || "Equity",
-            category: inferred,
-          });
-        }
-      } catch (e) {
-        console.warn("[Finnhub search] falling back to mock:", (e as Error).message);
-      }
+    let results: SearchResult[];
+    if (isIsin(q)) {
+      results = await searchByIsin(q);
+      if (!results.length) results = await searchYahoo(q);
+    } else {
+      results = await searchYahoo(q);
     }
 
-    return out;
+    if (data.category) {
+      results = results.filter(r => r.category === data.category);
+    }
+    return results;
   });
-
 export const fetchQuote = createServerFn({ method: "GET" })
   .inputValidator((d: { symbol: string }) => d)
   .handler(async ({ data }) => {
