@@ -832,17 +832,17 @@ function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
     setView("positions");
   };
 
-  const TabBar = (
-    <div style={{display:"flex",borderBottom:`1px solid ${B.border}`,flexShrink:0}}>
+  const Tabs = (
+    <div style={{display:"flex",gap:16,borderBottom:`1px solid ${B.border}`,padding:"0 4px",flexShrink:0}}>
       {(["positions","saved"] as const).map(v=>(
         <button key={v} onClick={()=>setView(v)} style={{
-          flex:1,padding:"8px 4px",
-          background:view===v?B.blue:"transparent",
-          color:view===v?B.white:B.gray2,
-          border:"none",fontFamily:"'Courier New',monospace",
-          fontSize:12,fontWeight:700,letterSpacing:"0.08em",cursor:"pointer",
+          padding:"12px 4px",background:"none",border:"none",
+          borderBottom: view===v ? `2px solid ${B.blue}` : "2px solid transparent",
+          color: view===v ? B.blue : B.gray2,
+          fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700,
+          letterSpacing:"0.04em",cursor:"pointer",
         }}>
-          {v==="positions"?"POSITIONS":"SAVED PORTFOLIOS"}
+          {v==="positions" ? "POSITIONS" : "SAVED PORTFOLIOS"}
         </button>
       ))}
     </div>
@@ -850,44 +850,40 @@ function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
 
   if (view === "saved") {
     return (
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {TabBar}
-        <div style={{flex:1,overflowY:"auto",background:B.bg}}>
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:B.bg}}>
+        {Tabs}
+        <div style={{flex:1,overflowY:"auto",padding:14}}>
           {!user ? (
-            <div style={{padding:"20px 12px",textAlign:"center"}}>
-              <div style={{fontSize:13,color:B.gray2,fontFamily:"'Courier New',monospace",marginBottom:12}}>
-                SIGN IN TO VIEW SAVED PORTFOLIOS
-              </div>
-              <Link to="/auth" style={{fontSize:13,color:B.blue,fontFamily:"'Courier New',monospace",textDecoration:"underline"}}>
-                → SIGN IN
-              </Link>
+            <div style={{textAlign:"center",padding:"30px 0"}}>
+              <div style={{fontSize:13,color:B.gray2,fontFamily:"'Courier New',monospace",marginBottom:12}}>SIGN IN TO VIEW SAVED PORTFOLIOS</div>
+              <Link to="/auth" style={{fontSize:13,color:B.blue,fontFamily:"'Courier New',monospace",textDecoration:"underline"}}>→ SIGN IN</Link>
             </div>
           ) : loadingSaved ? (
-            <div style={{padding:"20px 12px",textAlign:"center",color:B.gray3,fontFamily:"'Courier New',monospace",fontSize:13}}>
-              LOADING...
-            </div>
+            <div style={{textAlign:"center",color:B.gray3,fontFamily:"'Courier New',monospace",fontSize:13}}>LOADING...</div>
           ) : !savedList.length ? (
-            <div style={{padding:"20px 12px",textAlign:"center",color:B.gray3,fontFamily:"'Courier New',monospace",fontSize:13,lineHeight:1.8}}>
+            <div style={{textAlign:"center",color:B.gray3,fontFamily:"'Courier New',monospace",fontSize:13,lineHeight:1.8}}>
               NO SAVED PORTFOLIOS YET<br/>GO TO POSITIONS AND TAP SAVE
             </div>
           ) : (
-            savedList.map((p:any) => (
-              <div key={p.id} onClick={()=>handleLoad(p)} style={{
-                background:B.panel,borderBottom:`1px solid ${B.border}`,padding:"10px 12px",
-                cursor:"pointer",fontFamily:"'Courier New',monospace",
-              }}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:15,color:B.blue,fontWeight:700}}>{p.name}</span>
-                  <button onClick={(e)=>{e.stopPropagation();handleDelete(p.id);}} style={{
-                    background:"transparent",border:`1px solid ${B.gray4}`,color:B.gray3,
-                    cursor:"pointer",fontSize:11,padding:"1px 6px",
-                  }}>✕</button>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {savedList.map((p:any) => (
+                <div key={p.id} onClick={()=>handleLoad(p)} style={{
+                  background:B.panel,border:`1px solid ${B.border}`,borderRadius:10,padding:"12px 14px",
+                  cursor:"pointer",fontFamily:"'Courier New',monospace",
+                }}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:14,color:B.blue,fontWeight:700}}>{p.name}</span>
+                    <button onClick={(e)=>{e.stopPropagation();handleDelete(p.id);}} style={{
+                      background:"transparent",border:`1px solid ${B.border}`,color:B.gray3,borderRadius:6,
+                      cursor:"pointer",fontSize:11,padding:"2px 8px",
+                    }}>✕</button>
+                  </div>
+                  <div style={{fontSize:11,color:B.gray3,marginTop:4}}>
+                    {(p.holdings||[]).length} SECURITIES · UPDATED {new Date(p.updated_at).toLocaleDateString()}
+                  </div>
                 </div>
-                <div style={{fontSize:11,color:B.gray2,marginTop:4}}>
-                  {(p.holdings||[]).length} SECURITIES · UPDATED {new Date(p.updated_at).toLocaleDateString()}
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -895,165 +891,220 @@ function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
   }
 
   if (!holdings.length) return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      {TabBar}
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
-        <div style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center",lineHeight:1.8}}>
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:B.bg}}>
+      {Tabs}
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{fontSize:14,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center",lineHeight:1.8}}>
           NO SECURITIES IN PORTFOLIO<br/>USE SEARCH TO ADD LIVE POSITIONS
         </div>
       </div>
     </div>
   );
 
-  // Sort by market value desc for visual hierarchy
   const sorted = [...holdings].sort((a:any,b:any) => (b.value ?? 0) - (a.value ?? 0));
 
+  // Real day P&L in $ (reconstructed from today's % change, not stored historically)
+  const dayPL = holdings.reduce((s:number,h:any) => {
+    const chg = h.asset.dayChangePct;
+    if (chg == null) return s;
+    const prevValue = h.value / (1 + chg/100);
+    return s + (h.value - prevValue);
+  }, 0);
+
+  const totalCost = holdings.reduce((s:number,h:any) => s + (h.costBasis ?? (h.costPrice||0)*h.qty), 0);
+  const totalPL = holdings.reduce((s:number,h:any) => s + (h.value - (h.costBasis ?? (h.costPrice||0)*h.qty)), 0);
+  const totalPLPct = totalCost > 0 ? (totalPL/totalCost*100) : 0;
+
+  const sD = groupBy(holdings,"sector",m.total);
+  const gD = groupBy(holdings,"geo",m.total);
+  const tD = groupBy(holdings,"type",m.total);
+  const top3Pct = sorted.slice(0,3).reduce((s:number,h:any)=>s+h.value,0) / m.total * 100;
+
   return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      {TabBar}
-      {/* KPI Summary Bar */}
-      <div style={{background:"linear-gradient(180deg, "+B.blue+" 0%, #0044AA 100%)",
-        display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",
-        gap:1, flexShrink:0, padding:1}}>
+    <div style={{flex:1,overflowY:"auto",padding:14,display:"flex",flexDirection:"column",gap:14,background:B.bg}}>
+      {Tabs}
+
+      {/* KPI row 1 */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:14,
+        background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"14px 18px"}}>
+        <div>
+          <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace"}}>Portfolio Value</div>
+          <div style={{fontSize:20,fontWeight:700,color:B.gray1,fontFamily:"'Courier New',monospace"}}>${fmtM(m.total)}</div>
+        </div>
+        <div>
+          <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace"}}>Day P&amp;L</div>
+          <div style={{fontSize:20,fontWeight:700,color:pCol(dayPL),fontFamily:"'Courier New',monospace"}}>
+            {dayPL>=0?"+":"−"}${fmtM(Math.abs(dayPL))}
+          </div>
+          <div style={{fontSize:12,color:pCol(m.wDay),fontFamily:"'Courier New',monospace"}}>{pSign(fmt(m.wDay,2))}%</div>
+        </div>
+        <div>
+          <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace"}}>Total Return</div>
+          <div style={{fontSize:20,fontWeight:700,color:pCol(totalPLPct),fontFamily:"'Courier New',monospace"}}>{pSign(fmt(totalPLPct,1))}%</div>
+          <div style={{fontSize:12,color:pCol(totalPL),fontFamily:"'Courier New',monospace"}}>{totalPL>=0?"+":"−"}${fmtM(Math.abs(totalPL))}</div>
+        </div>
+        <div>
+          <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace"}}>Cash</div>
+          <div style={{fontSize:20,fontWeight:700,color:B.gray3,fontFamily:"'Courier New',monospace"}}>—</div>
+          <div style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace"}}>Not tracked yet</div>
+        </div>
+        <div>
+          <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace"}}>Positions</div>
+          <div style={{fontSize:20,fontWeight:700,color:B.gray1,fontFamily:"'Courier New',monospace"}}>{holdings.length}</div>
+        </div>
+      </div>
+
+      {/* KPI row 2 */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",gap:14,
+        background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"14px 18px"}}>
         {[
-          {l:"TOTAL VALUE",v:`$${fmtM(m.total)}`,ic:"$"},
-          {l:"EXPECTED RETURN",   v:`${pSign(fmt(m.wRet,1))}%`,ic:"↗"},
-          {l:"VOLATILITY",v:`${fmt(m.wVol,1)}%`,ic:"σ"},
-          {l:"SHARPE RATIO",    v:fmt(m.sharpe,2),ic:"S"},
+          {l:"Volatility (Ann.)", v:`${fmt(m.wVol,1)}%`, col:m.wVol>25?B.red:m.wVol>15?B.yellow:B.green},
+          {l:"Sharpe Ratio", v:fmt(m.sharpe,2), col:m.sharpe>0.7?B.green:m.sharpe>0.3?B.yellow:B.red},
+          {l:"Beta (vs S&P 500)", v:fmt(m.wBeta,2), col:B.gray1},
+          {l:"Dividend Yield", v:`${fmt(m.wDiv,2)}%`, col:B.gray1},
+          {l:"Max Drawdown (est.)", v:`-${fmt(m.wVol*2.5,1)}%`, col:B.red},
+          {l:"Last Rebalance", v:"—", col:B.gray3},
         ].map((k,i)=>(
-          <div key={i} style={{padding:"8px 12px",background:"rgba(0,0,0,0.15)",
-            display:"flex",flexDirection:"column",gap:2}}>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",
-              letterSpacing:"0.12em",fontFamily:"'Courier New',monospace"}}>{k.l}</div>
-            <div style={{fontSize:17,color:B.white,fontWeight:700,fontFamily:"'Courier New',monospace",letterSpacing:"-0.02em"}}>{k.v}</div>
+          <div key={i}>
+            <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace"}}>{k.l}</div>
+            <div style={{fontSize:17,fontWeight:700,color:k.col,fontFamily:"'Courier New',monospace"}}>{k.v}</div>
           </div>
         ))}
       </div>
 
-      {/* Position count + total */}
-      <div style={{padding:"5px 10px",background:B.panel2,borderBottom:`1px solid ${B.border}`,
-        display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-        <span style={{fontSize:11,color:B.gray2,fontFamily:"'Courier New',monospace",
-          letterSpacing:"0.08em",textTransform:"uppercase"}}>
-          {holdings.length} POSITION{holdings.length!==1?"S":""} · SORTED BY VALUE
-        </span>
-        <span style={{fontSize:11,color:B.cyan,fontFamily:"'Courier New',monospace",letterSpacing:"0.06em"}}>
-          LIVE MARKET DATA
-        </span>
+      {/* Breakdown row */}
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14}}>
+        <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"14px 18px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:12}}>
+            PORTFOLIO BREAKDOWN
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:10}}>
+            {[
+              {l:"TOP HOLDING", v:sorted[0]?.asset.ticker || "—", sub:sorted[0]?`${((sorted[0].value/m.total)*100).toFixed(1)}%`:""},
+              {l:"LARGEST SECTOR", v:sD[0]?.name || "—", sub:sD[0]?`${sD[0].pct}%`:""},
+              {l:"LARGEST REGION", v:gD[0]?.name || "—", sub:gD[0]?`${gD[0].pct}%`:""},
+              {l:"CASH POSITION", v:"—", sub:"Not tracked"},
+            ].map((c,i)=>(
+              <div key={i} style={{background:B.panel2,borderRadius:8,padding:"10px 12px"}}>
+                <div style={{fontSize:9,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace",marginBottom:4}}>{c.l}</div>
+                <div style={{fontSize:14,fontWeight:700,color:B.gray1,fontFamily:"'Courier New',monospace"}}>{c.v}</div>
+                <div style={{fontSize:12,color:B.blue,fontFamily:"'Courier New',monospace"}}>{c.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"14px 18px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:8}}>
+            ASSET ALLOCATION
+          </div>
+          <div style={{display:"flex",gap:10,alignItems:"center"}}>
+            <ResponsiveContainer width={80} height={80}>
+              <PieChart>
+                <Pie data={tD} cx="50%" cy="50%" innerRadius={24} outerRadius={38} paddingAngle={1} dataKey="value" strokeWidth={0}>
+                  {tD.map((_,i)=><Cell key={i} fill={PIE_COLS[i%PIE_COLS.length]}/>)}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{flex:1}}>
+              {tD.slice(0,5).map((d,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                  <span style={{width:7,height:7,borderRadius:2,background:PIE_COLS[i%PIE_COLS.length],display:"inline-block"}}/>
+                  <span style={{fontSize:11,color:B.gray1,flex:1,fontFamily:"'Courier New',monospace"}}>{d.name}</span>
+                  <span style={{fontSize:11,color:B.gray1,fontWeight:700,fontFamily:"'Courier New',monospace"}}>{d.pct}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Card list */}
-      <div style={{flex:1,overflowY:"auto",paddingBottom:80,background:B.bg}}>
-        {sorted.map((h:any,i:number) => {
-          const w = m.total > 0 ? (h.value / m.total * 100) : 0;
-          const cb = h.costBasis ?? (h.costPrice != null ? h.costPrice * h.qty : null);
-          const pl = cb != null ? h.value - cb : null;
-          const plPct = (cb != null && cb > 0) ? (pl! / cb * 100) : null;
-          const dayC = h.asset.dayChangePct;
-          const barCol = SERIES_COLS[i % SERIES_COLS.length];
+      {/* Holdings table + Insights */}
+      <div style={{display:"grid",gridTemplateColumns:"2.2fr 1fr",gap:14}}>
+        <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"14px 18px",overflowX:"auto"}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:10}}>
+            HOLDINGS
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"'Courier New',monospace",fontSize:12,minWidth:640}}>
+            <thead>
+              <tr style={{color:B.gray3,fontSize:10}}>
+                <th style={{textAlign:"left",padding:"4px 6px"}}>TICKER</th>
+                <th style={{textAlign:"left",padding:"4px 6px"}}>NAME</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>PRICE</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>DAY %</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>WEIGHT</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>VALUE</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>P&amp;L</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>P&amp;L %</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>AVG COST</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>QTY</th>
+                <th style={{textAlign:"right",padding:"4px 6px"}}>SINCE</th>
+                <th style={{textAlign:"center",padding:"4px 6px"}}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((h:any)=>{
+                const w = m.total>0 ? (h.value/m.total*100) : 0;
+                const cb = h.costBasis ?? (h.costPrice!=null ? h.costPrice*h.qty : null);
+                const pl = cb!=null ? h.value-cb : null;
+                const plPct = (cb!=null && cb>0) ? (pl!/cb*100) : null;
+                return (
+                  <tr key={h.isin||h.asset.ticker} style={{borderTop:`1px solid ${B.border}`}}>
+                    <td style={{padding:"6px",color:B.blue,fontWeight:700}}>{h.asset.ticker}</td>
+                    <td style={{padding:"6px",color:B.gray1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{h.asset.shortName||h.asset.ticker}</td>
+                    <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{h.asset.price!=null?h.asset.price.toFixed(2):"—"}</td>
+                    <td style={{padding:"6px",textAlign:"right",color:pCol(h.asset.dayChangePct),fontWeight:700}}>
+                      {h.asset.dayChangePct!=null?`${pSign(fmt(h.asset.dayChangePct,2))}%`:"—"}
+                    </td>
+                    <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{w.toFixed(1)}%</td>
+                    <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>${fmtM(h.value)}</td>
+                    <td style={{padding:"6px",textAlign:"right",color:pl!=null?pCol(pl):B.gray3}}>
+                      {pl!=null?`${pl>=0?"+":"−"}$${fmtM(Math.abs(pl))}`:"—"}
+                    </td>
+                    <td style={{padding:"6px",textAlign:"right",color:plPct!=null?pCol(plPct):B.gray3}}>
+                      {plPct!=null?`${pSign(fmt(plPct,1))}%`:"—"}
+                    </td>
+                    <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{h.costPrice!=null?h.costPrice.toFixed(2):"—"}</td>
+                    <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{fmt(h.qty,h.qty<1?4:2)}</td>
+                    <td style={{padding:"6px",textAlign:"right",color:B.gray3}}>{h.buyDt?new Date(h.buyDt).toLocaleDateString():"—"}</td>
+                    <td style={{padding:"6px",textAlign:"center"}}>
+                      <button onClick={()=>onRemove(h.isin||h.asset.ticker)} style={{
+                        background:"none",border:`1px solid ${B.border}`,color:B.gray3,borderRadius:6,
+                        cursor:"pointer",fontSize:11,padding:"2px 8px",
+                      }}>✕</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace",marginTop:8}}>
+            Showing {holdings.length} of {holdings.length} positions
+          </div>
+        </div>
 
-          return (
-            <div key={h.isin||h.asset.ticker} style={{
-              background:B.panel,
-              borderBottom:`1px solid ${B.border}`,
-              padding:"10px 12px",
-              display:"flex",flexDirection:"column",gap:8,
-              fontFamily:"'Courier New',monospace",
-              position:"relative",
-            }}>
-              {/* Row 1: Ticker + name + close */}
-              <div style={{display:"flex",alignItems:"baseline",gap:8}}>
-                <span style={{fontSize:17,color:B.blue,fontWeight:700,letterSpacing:"0.04em"}}>{h.asset.ticker}</span>
-                <span style={{fontSize:12,color:B.gray2,flex:1,overflow:"hidden",textOverflow:"ellipsis",
-                  whiteSpace:"nowrap",letterSpacing:"0.02em"}}>
-                  {h.asset.shortName || h.asset.name || ""}
-                </span>
-                <button onClick={()=>onRemove(h.isin||h.asset.ticker)} title="Remove position" style={{
-                  background:"transparent",border:`1px solid ${B.gray4}`,color:B.gray3,cursor:"pointer",
-                  fontSize:11,padding:"1px 6px",fontFamily:"'Courier New',monospace",lineHeight:1.3,
-                }}>✕</button>
+        <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"14px 18px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:10}}>
+            PORTFOLIO INSIGHTS
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            {sD[0] && (
+              <div style={{fontSize:12,color:B.gray1,fontFamily:"'Courier New',monospace",lineHeight:1.5}}>
+                <b style={{color:B.blue}}>{sD[0].name}</b> exposure is {sD[0].pct}% of the portfolio.
               </div>
-
-              {/* Row 2: Price · DAY% chip · Value · Weight */}
-              <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                <div>
-                  <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>PRICE</div>
-                  <div style={{fontSize:15,color:B.yellow,fontWeight:700,letterSpacing:"-0.02em"}}>
-                    {h.asset.price!=null ? h.asset.price.toLocaleString(undefined,{maximumFractionDigits:2}) : "---"}
-                  </div>
-                </div>
-                <div style={{
-                  padding:"3px 8px",
-                  background: dayC != null ? (dayC >= 0 ? "rgba(0,255,102,0.12)" : "rgba(255,51,51,0.12)") : "transparent",
-                  border:`1px solid ${dayC != null ? pCol(dayC) : B.border}`,
-                  minWidth:64,textAlign:"center",
-                }}>
-                  <div style={{fontSize:9,color:B.gray3,letterSpacing:"0.1em",textTransform:"uppercase"}}>DAY</div>
-                  <div style={{fontSize:13,color:pCol(dayC),fontWeight:700}}>
-                    {dayC!=null ? `${pSign(fmt(dayC,2))}%` : "—"}
-                  </div>
-                </div>
-                <div style={{marginLeft:"auto",textAlign:"right"}}>
-                  <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>MKT VALUE</div>
-                  <div style={{fontSize:15,color:B.yellow,fontWeight:700}}>${fmtM(h.value)}</div>
-                </div>
-                <div style={{textAlign:"right",minWidth:64}}>
-                  <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>WEIGHT</div>
-                  <div style={{fontSize:13,color:B.cyan,fontWeight:700}}>{w.toFixed(1)}%</div>
-                </div>
+            )}
+            {gD[0] && (
+              <div style={{fontSize:12,color:B.gray1,fontFamily:"'Courier New',monospace",lineHeight:1.5}}>
+                <b style={{color:B.blue}}>{gD[0].name}</b> exposure is {gD[0].pct}%.
               </div>
-
-              {/* Weight bar */}
-              <div style={{height:3,background:B.panel2,position:"relative",overflow:"hidden"}}>
-                <div style={{position:"absolute",top:0,left:0,height:"100%",width:`${Math.min(100,w)}%`,
-                  background:barCol,transition:"width 0.3s ease"}}/>
-              </div>
-
-              {/* Row 3: Cost/P&L strip */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(88px, 1fr))",gap:6,
-                paddingTop:4,borderTop:`1px dashed ${B.border}`}}>
-                <div>
-                  <div style={{fontSize:9,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>QTY</div>
-                  <div style={{fontSize:12,color:B.gray1,fontWeight:700}}>{fmt(h.qty,h.qty<1?4:2)}</div>
-                </div>
-                {h.costPrice != null && (
-                  <div>
-                    <div style={{fontSize:9,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>AVG COST</div>
-                    <div style={{fontSize:12,color:B.gray1,fontWeight:700}}>${fmt(h.costPrice,2)}</div>
-                  </div>
-                )}
-                {cb != null && (
-                  <div>
-                    <div style={{fontSize:9,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>COST BASIS</div>
-                    <div style={{fontSize:12,color:B.gray1,fontWeight:700}}>${fmtM(cb)}</div>
-                  </div>
-                )}
-                {h.buyDate && (
-                  <div>
-                    <div style={{fontSize:9,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>SINCE</div>
-                    <div style={{fontSize:12,color:B.cyan,fontWeight:700}}>{h.buyDate}</div>
-                  </div>
-                )}
-                {pl != null && (
-                  <div style={{gridColumn:"span 2"}}>
-                    <div style={{fontSize:9,color:B.gray3,letterSpacing:"0.08em",textTransform:"uppercase"}}>UNREALIZED P&L</div>
-                    <div style={{fontSize:13,color:pCol(pl),fontWeight:700}}>
-                      {pl >= 0 ? "+" : "−"}${fmtM(Math.abs(pl))} <span style={{color:B.gray3}}>·</span> {pSign(fmt(plPct!,2))}%
-                    </div>
-                  </div>
-                )}
-              </div>
+            )}
+            <div style={{fontSize:12,color:B.gray1,fontFamily:"'Courier New',monospace",lineHeight:1.5}}>
+              Top 3 holdings represent <b style={{color:B.blue}}>{top3Pct.toFixed(1)}%</b> of the portfolio.
             </div>
-          );
-        })}
-
-        {/* Total footer */}
-        <div style={{padding:"10px 12px",background:B.panel2,borderTop:`2px solid ${B.blue}`,
-          display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:12,color:B.blue,fontFamily:"'Courier New',monospace",fontWeight:700,letterSpacing:"0.08em"}}>PORTFOLIO TOTAL</span>
-          <span style={{fontSize:17,color:B.yellow,fontFamily:"'Courier New',monospace",fontWeight:700,letterSpacing:"-0.02em"}}>
-            ${fmtM(m.total)}
-          </span>
+            <div style={{fontSize:12,color:B.gray1,fontFamily:"'Courier New',monospace",lineHeight:1.5}}>
+              Portfolio volatility is <b style={{color:B.blue}}>{fmt(m.wVol,1)}%</b> (annualized estimate).
+            </div>
+          </div>
         </div>
       </div>
     </div>
