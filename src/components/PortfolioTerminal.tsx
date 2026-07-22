@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import AnalysisPage from "./AnalysisPage";
+import HomePage from "./HomePage";
 import { getInvestorProfile } from "@/lib/profile.functions";
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
@@ -323,7 +324,7 @@ function BottomNav({page,setPage,badge}:any) {
   );
 }
 
-function MarketStatusBar() {
+export function MarketStatusBar() {
   const [statuses, setStatuses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
@@ -374,7 +375,7 @@ function MarketStatusBar() {
   );
 }
 
-function IndicesOverview() {
+export function IndicesOverview() {
   const INDICES = [
     { sym: "SPY",  label: "S&P 500 ETF" },
     { sym: "QQQ",  label: "NASDAQ 100" },
@@ -427,118 +428,6 @@ function IndicesOverview() {
         })}
       </div>
     </BPanel>
-  );
-}
-
-function HomePage({holdings,setPage,onRefresh,refreshing}:any) {
-  const m=useMemo(()=>pMet(holdings),[holdings]);
-  const { user } = useUser();
-  const [saving,setSaving]=useState(false);
-  const [saveMsg,setSaveMsg]=useState("");
-  const handleSave=async()=>{
-    if(!user){ window.location.href="/auth"; return; }
-    const name=prompt("Portfolio name:","Portfolio "+new Date().toLocaleDateString());
-    if(!name) return;
-    setSaving(true);
-    try {
-      await savePortfolio({ data: { name, holdings } });
-      setSaveMsg("✓ SAVED");
-    } catch(e:any){ setSaveMsg("ERROR: "+e.message); }
-    finally { setSaving(false); setTimeout(()=>setSaveMsg(""),2000); }
-  };
-
-
-  return (
-    <div style={{flex:1,overflowY:"auto",paddingBottom:4}}>
-      <MarketStatusBar/>
-      <IndicesOverview/>
-
-      <div style={{marginTop:1}}>
-      <BPanel title="PORTFOLIO OVERVIEW  LIVE DATA">
-        <div style={{padding:"6px 8px"}}>
-          {!m?(
-            <div style={{padding:"12px 0",textAlign:"center"}}>
-              <div style={{fontSize:13,color:B.gray2,fontFamily:"'Courier New',monospace",marginBottom:8}}>NO ACTIVE PORTFOLIO</div>
-              <div style={{fontSize:15,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:12}}>
-                USE SEARCH TO FIND SECURITIES BY ISIN OR TICKER
-              </div>
-              <button onClick={()=>setPage("search")} style={{
-                background:B.blue,border:"none",color:B.white,
-                padding:"6px 20px",cursor:"pointer",
-                fontFamily:"'Courier New',monospace",fontSize:17,fontWeight:700,letterSpacing:"0.08em"}}>
-                {"> SEARCH SECURITIES"}
-              </button>
-            </div>
-          ):(
-            <>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginBottom:6}}>
-                <div style={{borderLeft:`3px solid ${B.blue}`,paddingLeft:6}}>
-                  <div style={{fontSize:14,color:B.gray2,textTransform:"uppercase",marginBottom:1}}>TOTAL MKT VALUE</div>
-                  <div style={{fontSize:16,color:B.yellow,fontWeight:700,letterSpacing:"-0.02em"}}>${fmtM(m.total)}</div>
-                </div>
-                <div style={{borderLeft:`3px solid ${pCol(m.wRet)}`,paddingLeft:6}}>
-                  <div style={{fontSize:14,color:B.gray2,textTransform:"uppercase",marginBottom:1}}>PORT EXP RETURN</div>
-                  <div style={{fontSize:16,color:pCol(m.wRet),fontWeight:700}}>{pSign(fmt(m.wRet,1))}%</div>
-                </div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:0,
-                borderTop:`1px solid ${B.border}`,paddingTop:4}}>
-                {[
-                  {l:"VOLATILITY",v:`${fmt(m.wVol,1)}%`,col:m.wVol>25?B.red:m.wVol>15?B.yellow:B.green},
-                  {l:"SHARPE",    v:fmt(m.sharpe,2),    col:m.sharpe>0.7?B.green:m.sharpe>0.3?B.yellow:B.red},
-                  {l:"BETA",      v:fmt(m.wBeta,2),     col:m.wBeta>1.3?B.red:B.white},
-                  {l:"DIV YIELD", v:`${fmt(m.wDiv,1)}%`,col:B.cyan},
-                ].map((k,i)=>(
-                  <div key={i} style={{padding:"3px 4px",borderRight:i<3?`1px solid ${B.border}`:"none"}}>
-                    <div style={{fontSize:16,color:B.gray3,textTransform:"uppercase",marginBottom:1}}>{k.l}</div>
-                    <div style={{fontSize:16,color:k.col,fontWeight:700}}>{k.v}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{borderTop:`1px solid ${B.border}`,marginTop:4,paddingTop:4,
-                display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:14,color:B.gray3,fontFamily:"'Courier New',monospace"}}>
-                  {holdings.length} SECURITIES  ·  LIVE MARKET DATA
-                </span>
-                <div style={{display:"flex",gap:4}}>
-                  <button onClick={handleSave} disabled={saving||!holdings.length} style={{
-                    background:"none",border:`1px solid ${B.green}`,color:B.green,
-                    fontFamily:"'Courier New',monospace",fontSize:14,cursor:saving?"wait":"pointer",
-                    padding:"2px 8px"}}>
-                    {saving?"...":saveMsg||"💾 SAVE"}
-                  </button>
-                  <button onClick={onRefresh} disabled={refreshing} style={{
-                    background:"none",border:`1px solid ${B.border}`,color:refreshing?B.gray3:B.blue,
-                    fontFamily:"'Courier New',monospace",fontSize:14,cursor:refreshing?"not-allowed":"pointer",
-                    padding:"2px 8px",animation:refreshing?"blink 0.5s infinite":"none"}}>
-                    {refreshing?"UPDATING...":"↻ REFRESH"}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </BPanel>
-
-      {holdings.length>0&&(
-        <BPanel title="SECURITIES — LIVE PRICES" style={{marginTop:1}}>
-          {holdings.map(h=>(
-            <div key={h.isin} style={{display:"flex",alignItems:"center",gap:8,
-              padding:"4px 8px",borderBottom:`1px solid ${B.border}`,
-              fontFamily:"'Courier New',monospace"}}>
-              <span style={{fontSize:17,color:B.blue,fontWeight:700,minWidth:52}}>{h.asset.ticker}</span>
-              <span style={{fontSize:17,color:B.yellow,minWidth:70}}>{h.asset.price!=null?h.asset.price.toLocaleString(undefined,{maximumFractionDigits:2}):"---"}</span>
-              <span style={{fontSize:17,color:pCol(h.asset.dayChangePct),minWidth:50,fontWeight:700}}>
-                {h.asset.dayChangePct!=null?`${pSign(fmt(h.asset.dayChangePct,2))}%`:"---"}
-              </span>
-              <span style={{fontSize:15,color:B.gray2,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.asset.shortName||h.asset.ticker}</span>
-            </div>
-          ))}
-        </BPanel>
-      )}
-
-      </div>
-    </div>
   );
 }
 
