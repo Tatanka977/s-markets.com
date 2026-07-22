@@ -561,60 +561,138 @@ useEffect(()=>{
 
   const inP = (sym) => portfolio.some(h => h.asset.ticker===sym || h.asset.symbol===sym);
 
+  const currentTotal = portfolio.reduce((s: number, h: any) => s + h.value, 0);
+  const investmentValue = (parseFloat(qty)||0) * (parseFloat(buyPx) || detail?.price || 0);
+  const expectedWeight = (currentTotal + investmentValue) > 0
+    ? (investmentValue / (currentTotal + investmentValue)) * 100 : 0;
+  const currentSectorValue = portfolio
+    .filter((h: any) => (h.asset.sector || h.asset.industry || "OTHER") === (detail?.sector || detail?.industry || "OTHER"))
+    .reduce((s: number, h: any) => s + h.value, 0);
+  const oldSectorPct = currentTotal > 0 ? (currentSectorValue / currentTotal) * 100 : 0;
+  const newSectorPct = (currentTotal + investmentValue) > 0
+    ? ((currentSectorValue + investmentValue) / (currentTotal + investmentValue)) * 100 : 0;
+
   if (sel && detail) return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{background:B.blue,padding:"4px 8px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+    <div style={{flex:1,overflowY:"auto",padding:14,display:"flex",flexDirection:"column",gap:14,background:B.bg}}>
+      <button onClick={()=>{setSel(null);setDetail(null);}} style={{
+        alignSelf:"flex-start",background:"none",border:"none",color:B.blue,cursor:"pointer",
+        fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700,padding:0}}>
+        ← BACK TO SEARCH
+      </button>
+
+      {/* Header */}
+      <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"16px 18px",
+        display:"flex",flexWrap:"wrap",justifyContent:"space-between",alignItems:"center",gap:12}}>
         <div>
-          <span style={{fontSize:13,color:B.white,fontWeight:700,fontFamily:"'Courier New',monospace"}}>{detail.ticker}</span>
-          <span style={{fontSize:14,color:"rgba(255,255,255,0.7)",marginLeft:6,fontFamily:"'Courier New',monospace"}}>{detail.exchange}</span>
+          <div style={{display:"flex",alignItems:"baseline",gap:10}}>
+            <span style={{fontSize:24,fontWeight:700,color:B.blue,fontFamily:"'Courier New',monospace"}}>{detail.ticker}</span>
+            <span style={{fontSize:16,color:B.gray1,fontFamily:"'Courier New',monospace"}}>{detail.shortName}</span>
+          </div>
+          <div style={{fontSize:12,color:B.gray3,fontFamily:"'Courier New',monospace",marginTop:2}}>
+            {detail.exchange || "—"} · {detail.sector || "—"} · {detail.currency || "USD"}
+          </div>
         </div>
-        <button onClick={()=>{setSel(null);setDetail(null);}} style={{background:"none",border:"none",color:B.white,cursor:"pointer",fontSize:17,fontFamily:"'Courier New',monospace"}}>X CLOSE</button>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:26,fontWeight:700,color:B.gray1,fontFamily:"'Courier New',monospace"}}>
+            {detail.price!=null?detail.price.toFixed(2):"---"}
+          </div>
+          <div style={{fontSize:14,fontWeight:700,color:pCol(detail.dayChangePct),fontFamily:"'Courier New',monospace"}}>
+            {detail.dayChangePct!=null?`${pSign(fmt(detail.dayChangePct,2))}%`:"---"}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>document.getElementById("add-position-panel")?.scrollIntoView({behavior:"smooth"})} style={{
+            background:B.blue,border:"none",color:B.white,padding:"8px 16px",borderRadius:8,cursor:"pointer",
+            fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700}}>+ ADD TO PORTFOLIO</button>
+          <button onClick={addWatch} disabled={watchBusy} style={{
+            background:"none",border:`1px solid ${B.border}`,color:B.blue,padding:"8px 16px",borderRadius:8,
+            cursor:watchBusy?"wait":"pointer",fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700}}>
+            {watchBusy ? "..." : watchMsg || "☆ ADD TO WATCHLIST"}
+          </button>
+        </div>
       </div>
-      <div style={{flex:1,overflowY:"auto",paddingBottom:80,padding:8}}>
-        <div style={{fontSize:17,color:B.gray1,fontFamily:"'Courier New',monospace",marginBottom:8}}>{detail.shortName}</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
+
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14}}>
+        {/* Price performance (honest placeholder) */}
+        <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"16px 18px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:10}}>
+            PRICE PERFORMANCE
+          </div>
+          <div style={{height:220,display:"flex",alignItems:"center",justifyContent:"center",background:B.panel2,borderRadius:8}}>
+            <div style={{fontSize:12,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center",padding:"0 20px",lineHeight:1.6}}>
+              A full historical chart with benchmark comparison is coming soon — we currently only fetch a single historical close price at a time, not a full time series.
+            </div>
+          </div>
+        </div>
+
+        {/* Key metrics */}
+        <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"16px 18px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:10}}>
+            KEY METRICS
+          </div>
           {[
-            {l:"PRICE",v:detail.price!=null?detail.price.toFixed(2):"---",col:B.yellow},
-            {l:"DAY %",v:detail.dayChangePct!=null?`${pSign(fmt(detail.dayChangePct,2))}%`:"---",col:pCol(detail.dayChangePct)},
-            {l:"YTD %",v:detail.ytd!=null?`${pSign(fmt(detail.ytd,1))}%`:"---",col:pCol(detail.ytd)},
-            {l:"VOL %",v:detail.vol!=null?`${fmt(detail.vol,1)}%`:"---",col:B.white},
-            {l:"CURRENCY",v:detail.currency||"USD",col:B.cyan},
-            {l:"SECTOR",v:detail.sector||"N/A",col:B.gray1},
+            {l:"Market Cap", v: detail.marketCap!=null ? `$${fmtM(detail.marketCap)}` : "—"},
+            {l:"Enterprise Value", v:"—"},
+            {l:"P/E (TTM)", v: detail.pe!=null ? `${fmt(detail.pe,1)}x` : "—"},
+            {l:"Forward P/E", v:"—"},
+            {l:"Dividend Yield", v: detail.dividendYield!=null ? `${fmt(detail.dividendYield,2)}%` : "—"},
+            {l:"Beta", v: detail.beta!=null ? fmt(detail.beta,2) : "—"},
+            {l:"52W High", v:"—"},
+            {l:"52W Low", v:"—"},
+            {l:"Avg. Volume", v:"—"},
           ].map((k,i)=>(
-            <div key={i} style={{border:`1px solid ${B.border}`,padding:"4px 6px"}}>
-              <div style={{fontSize:16,color:B.gray3,fontFamily:"'Courier New',monospace",textTransform:"uppercase"}}>{k.l}</div>
-              <div style={{fontSize:16,color:k.col,fontWeight:700,fontFamily:"'Courier New',monospace"}}>{k.v}</div>
+            <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",
+              borderBottom: i<8?`1px solid ${B.border}`:"none"}}>
+              <span style={{fontSize:12,color:B.gray3,fontFamily:"'Courier New',monospace"}}>{k.l}</span>
+              <span style={{fontSize:13,fontWeight:700,color:B.gray1,fontFamily:"'Courier New',monospace"}}>{k.v}</span>
             </div>
           ))}
         </div>
-        <div style={{border:`1px solid ${B.blue}`,padding:8,marginTop:8}}>
-          <div style={{fontSize:15,color:B.blue,fontFamily:"'Courier New',monospace",marginBottom:6,fontWeight:700}}>ADD TO PORTFOLIO</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr",gap:6,marginBottom:6}}>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1.2fr",gap:14}}>
+        {/* Company overview */}
+        <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"16px 18px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:10}}>
+            COMPANY OVERVIEW
+          </div>
+          <div style={{fontSize:12,color:B.gray3,fontFamily:"'Courier New',monospace",lineHeight:1.6}}>
+            Company description isn't available yet — this needs a data source we haven't connected.
+          </div>
+        </div>
+
+        {/* Position Impact Simulator — real numbers */}
+        <div id="add-position-panel" style={{background:B.panel,border:`1px solid ${B.blue}`,borderRadius:12,padding:"16px 18px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:10}}>
+            POSITION IMPACT SIMULATOR
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr",gap:8,marginBottom:10}}>
             <div>
-              <div style={{fontSize:14,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:2}}>QUANTITY</div>
+              <div style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:2}}>QUANTITY</div>
               <input value={qty} onChange={e=>setQty(e.target.value)} type="number" min="0" step="any"
-                style={{width:"100%",background:B.bg,border:`1px solid ${B.border}`,color:B.yellow,
-                  padding:"4px 6px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
+                style={{width:"100%",background:B.panel2,border:`1px solid ${B.border}`,color:B.gray1,borderRadius:6,
+                  padding:"6px 8px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
             </div>
             <div>
-              <div style={{fontSize:14,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:2}}>BUY PRICE</div>
+              <div style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:2}}>BUY PRICE</div>
               <input value={buyPx} onChange={e=>setBuyPx(e.target.value)} type="number" min="0" step="any"
                 placeholder={detail.price!=null?detail.price.toFixed(2):""}
-                style={{width:"100%",background:B.bg,border:`1px solid ${B.border}`,color:B.yellow,
-                  padding:"4px 6px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
+                style={{width:"100%",background:B.panel2,border:`1px solid ${B.border}`,color:B.gray1,borderRadius:6,
+                  padding:"6px 8px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
             </div>
             <div>
-              <div style={{fontSize:14,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:2}}>PURCHASE DATE</div>
+              <div style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:2}}>PURCHASE DATE</div>
               <input value={buyDt} onChange={e=>handleDateChange(e.target.value)} type="date" max={todayYmd}
                 data-testid="search-purchase-date"
-                style={{width:"100%",background:B.bg,border:`1px solid ${histBusy?B.blue:B.border}`,color:B.cyan,
-                  padding:"4px 6px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
+                style={{width:"100%",background:B.panel2,border:`1px solid ${histBusy?B.blue:B.border}`,color:B.gray1,borderRadius:6,
+                  padding:"6px 8px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
             </div>
           </div>
+
           {histInfo.text && (
             <div data-testid="search-historical-status" style={{
-              padding:"4px 8px", marginBottom:6, fontSize:12, fontWeight:700,
-              fontFamily:"'Courier New',monospace", letterSpacing:"0.04em",
+              padding:"6px 10px",marginBottom:10,fontSize:12,fontWeight:700,borderRadius:6,
+              fontFamily:"'Courier New',monospace",
               border:`1px solid ${histInfo.kind==="ok"?B.green:histInfo.kind==="warn"?B.yellow:histInfo.kind==="err"?B.red:B.border}`,
               color: histInfo.kind==="ok"?B.green:histInfo.kind==="warn"?B.yellow:histInfo.kind==="err"?B.red:B.gray2,
               background: B.panel2,
@@ -623,32 +701,41 @@ useEffect(()=>{
               {histInfo.text}
             </div>
           )}
-          <div style={{fontSize:15,color:B.gray2,fontFamily:"'Courier New',monospace",marginBottom:6}}>
-            COST = ${fmtM((parseFloat(qty)||0)*(parseFloat(buyPx)||detail.price||0))}
-            {" · "}MKT = ${fmtM((parseFloat(qty)||0)*(detail.price||0))}
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(110px,1fr))",gap:10,
+            background:B.panel2,borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+            <div>
+              <div style={{fontSize:10,color:B.gray3,fontFamily:"'Courier New',monospace",textTransform:"uppercase"}}>Investment Value</div>
+              <div style={{fontSize:14,fontWeight:700,color:B.gray1,fontFamily:"'Courier New',monospace"}}>${fmtM(investmentValue)}</div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:B.gray3,fontFamily:"'Courier New',monospace",textTransform:"uppercase"}}>Expected Weight</div>
+              <div style={{fontSize:14,fontWeight:700,color:B.gray1,fontFamily:"'Courier New',monospace"}}>{fmt(expectedWeight,2)}%</div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:B.gray3,fontFamily:"'Courier New',monospace",textTransform:"uppercase"}}>Sector Exposure Change</div>
+              <div style={{fontSize:14,fontWeight:700,color:B.green,fontFamily:"'Courier New',monospace"}}>
+                {detail.sector||detail.industry||"OTHER"} {pSign(fmt(newSectorPct-oldSectorPct,2))}%
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:B.gray3,fontFamily:"'Courier New',monospace",textTransform:"uppercase"}}>Cash Impact</div>
+              <div style={{fontSize:14,fontWeight:700,color:B.red,fontFamily:"'Courier New',monospace"}}>-${fmtM(investmentValue)}</div>
+            </div>
           </div>
+
           {addMsg && (
-            <div style={{
-              padding:"6px 8px", marginBottom:6,
-              background:"#003300", border:`1px solid ${B.green || "#00FF66"}`,
-              color: B.green || "#00FF66",
-              fontFamily:"'Courier New',monospace", fontSize:14, fontWeight:700,
-              letterSpacing:"0.06em", textAlign:"center",
-            }}>
+            <div style={{padding:"8px",marginBottom:8,background:"rgba(0,200,120,0.1)",border:`1px solid ${B.green}`,
+              color:B.green,borderRadius:6,fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700,textAlign:"center"}}>
               {addMsg}
             </div>
           )}
+
           <button onClick={add} style={{
-            width:"100%",background:B.blue,border:"none",color:B.white,
-            padding:"6px",cursor:"pointer",fontFamily:"'Courier New',monospace",
-            fontSize:17,fontWeight:700,letterSpacing:"0.08em"}}>
+            width:"100%",background:B.blue,border:"none",color:B.white,borderRadius:8,
+            padding:"10px",cursor:"pointer",fontFamily:"'Courier New',monospace",
+            fontSize:14,fontWeight:700,letterSpacing:"0.04em"}}>
             ADD POSITION
-          </button>
-          <button onClick={addWatch} disabled={watchBusy} style={{
-            width:"100%",marginTop:6,background:"transparent",border:`1px solid ${B.yellow}`,color:B.yellow,
-            padding:"6px",cursor:watchBusy?"wait":"pointer",fontFamily:"'Courier New',monospace",
-            fontSize:13,fontWeight:700,letterSpacing:"0.08em"}}>
-            {watchBusy ? "..." : watchMsg || "★ ADD TO WATCHLIST"}
           </button>
         </div>
       </div>
