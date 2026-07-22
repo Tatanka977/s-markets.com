@@ -164,6 +164,7 @@ async function buildQuote(symbol: string): Promise<Quote> {
     dividendYield: m.dividendYieldIndicatedAnnual ?? null,
     geo: geoFromCountry(profile?.country),
     industry: profile?.finnhubIndustry,
+    sector: profile?.finnhubIndustry,
     type: "Equity",
     ytd,
     vol: +vol.toFixed(2),
