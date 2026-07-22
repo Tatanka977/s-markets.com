@@ -582,7 +582,7 @@ useEffect(()=>{
     setHistInfo({kind:null, text:""});
     try {
       const d = await fetchQuote(r.symbol);
-      d.sector  = d.sector  || r.sector  || "N/A";
+      d.sector  = d.sector  || r.sector  || d.industry || r.industry || "N/A";
       d.industry= d.industry|| r.industry|| "N/A";
       d.type    = d.type    || r.type    || "EQUITY";
       d.geo     = d.geo     || r.geo     || "N/A";
