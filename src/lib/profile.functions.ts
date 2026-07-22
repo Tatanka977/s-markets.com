@@ -108,3 +108,44 @@ export const updateProfile = createServerFn({ method: "POST" })
     if (typeof window !== "undefined") window.localStorage.setItem(K.prof, JSON.stringify({ display_name: data.display_name }));
     return { display_name: data.display_name };
   });
+export interface InvestorProfile {
+  age_range?: string;
+  investment_goal?: string;
+  time_horizon?: string;
+  risk_tolerance?: string;
+  experience_level?: string;
+  onboarding_skipped?: boolean;
+}
+
+export async function getInvestorProfile(): Promise<InvestorProfile | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData?.user;
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("investor_profiles")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as InvestorProfile | null;
+}
+
+export async function saveInvestorProfile({ data }: { data: InvestorProfile }): Promise<InvestorProfile> {
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData?.user;
+  if (!user) throw new Error("Not signed in");
+  const { data: row, error } = await supabase
+    .from("investor_profiles")
+    .upsert({ user_id: user.id, ...data, updated_at: new Date().toISOString() })
+    .select()
+    .single();
+  if (error) throw error;
+  return row as InvestorProfile;
+}
+
+export async function skipOnboarding(): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData?.user;
+  if (!user) return;
+  await supabase.from("investor_profiles").upsert({ user_id: user.id, onboarding_skipped: true });
+}
