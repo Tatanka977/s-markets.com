@@ -9,15 +9,15 @@ export default function LandingPage() {
         <div className="container nav">
 
           <div className="logo">
-            Strategic Markets
+            <span className="logo-accent">Strategic</span> <span className="logo-muted">Markets</span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <a href="/blog" style={{ textDecoration: "none", color: "inherit", fontSize: 15 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+            <a href="/blog" className="nav-link">
               Blog
             </a>
             <a className="btn btn-primary" href="/terminal">
-              Open Terminal
+              Open Terminal <span className="btn-arrow">→</span>
             </a>
           </div>
 
@@ -31,10 +31,12 @@ export default function LandingPage() {
 
           <div className="hero-content">
 
+            <span className="badge">AI-POWERED INVESTING PLATFORM</span>
+
             <h1>
               Smarter investing.
               <br />
-              Powered by AI.
+              <span className="accent">Powered</span> by AI.
             </h1>
 
             <p>
@@ -46,7 +48,7 @@ export default function LandingPage() {
             <div className="hero-buttons">
 
               <a href="/terminal" className="btn btn-primary">
-                Launch Platform
+                Launch Platform <span className="btn-arrow">→</span>
               </a>
 
               <a href="#features" className="btn btn-secondary">
@@ -55,21 +57,30 @@ export default function LandingPage() {
 
             </div>
 
-<div className="stats">
+            <div className="stats">
 
-              <div>
-                <h2>7+</h2>
-                <span>Asset classes covered</span>
+              <div className="stat">
+                <div className="stat-icon stat-icon-blue">🌐</div>
+                <div>
+                  <h2>7+</h2>
+                  <span>Asset classes covered</span>
+                </div>
               </div>
 
-              <div>
-                <h2>Free</h2>
-                <span>To get started</span>
+              <div className="stat">
+                <div className="stat-icon stat-icon-blue">🎁</div>
+                <div>
+                  <h2>Free</h2>
+                  <span>To get started</span>
+                </div>
               </div>
 
-              <div>
-                <h2>AI</h2>
-                <span>Portfolio insights</span>
+              <div className="stat">
+                <div className="stat-icon stat-icon-purple">✨</div>
+                <div>
+                  <h2>AI</h2>
+                  <span>Portfolio insights</span>
+                </div>
               </div>
 
             </div>
@@ -140,17 +151,17 @@ export default function LandingPage() {
               <div className="portfolio">
 
                 <div>
-                  <span>Global Equity</span>
+                  <span>🌐 Global Equity</span>
                   <strong>+12.4%</strong>
                 </div>
 
                 <div>
-                  <span>AI Strategy</span>
+                  <span>🧠 AI Strategy</span>
                   <strong>+18.9%</strong>
                 </div>
 
                 <div>
-                  <span>Crypto Index</span>
+                  <span>₿ Crypto Index</span>
                   <strong>+7.2%</strong>
                 </div>
 
@@ -173,13 +184,11 @@ export default function LandingPage() {
 
           <div className="section-title">
 
-            <h2>
-              Everything investors need
-            </h2>
+            <span className="eyebrow">EVERYTHING INVESTORS NEED</span>
 
-            <p>
+            <h2>
               Powerful tools designed for modern portfolio management.
-            </p>
+            </h2>
 
           </div>
 
@@ -189,7 +198,7 @@ export default function LandingPage() {
 
             <div className="card">
 
-              <div className="icon">
+              <div className="icon icon-orange">
                 ⚡
               </div>
 
@@ -207,7 +216,7 @@ export default function LandingPage() {
 
             <div className="card">
 
-              <div className="icon">
+              <div className="icon icon-blue">
                 📊
               </div>
 
@@ -225,7 +234,7 @@ export default function LandingPage() {
 
             <div className="card">
 
-              <div className="icon">
+              <div className="icon icon-green">
                 🔒
               </div>
 
@@ -234,7 +243,7 @@ export default function LandingPage() {
               </h3>
 
               <p>
-                Enterprise-grade infrastructure protecting your data.
+                Built on Supabase with row-level security, so your data stays yours.
               </p>
 
             </div>
@@ -260,12 +269,12 @@ export default function LandingPage() {
 
 
           <p>
-            Access the Strategic Markets portfolio terminal today.
+            Access powerful analytics, AI insights and real-time data.
           </p>
 
 
           <a href="/terminal" className="btn btn-white">
-            Start Now
+            Open Terminal <span className="btn-arrow">→</span>
           </a>
 
 
@@ -276,9 +285,19 @@ export default function LandingPage() {
 
 
       <footer>
+        <div className="container footer-grid">
+          <div className="logo footer-logo">
+            <span className="logo-accent">Strategic</span> <span className="logo-muted-footer">Markets</span>
+          </div>
 
-        © 2026 Strategic Markets. All rights reserved.
+          <div className="footer-copy">© 2026 Strategic Markets. All rights reserved.</div>
 
+          <div className="footer-links">
+            <a href="/disclaimer">Privacy</a>
+            <a href="/disclaimer">Terms</a>
+            <a href="mailto:hello@s-markets.com">Contact</a>
+          </div>
+        </div>
       </footer>
 
 
