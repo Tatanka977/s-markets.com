@@ -307,6 +307,7 @@ export default function HomePage({ holdings, setPage, onRefresh, refreshing }: a
           background: "none", border: `1px solid ${B.border}`, color: (refreshing || !holdings.length) ? B.gray3 : B.blue,
           fontFamily: FONT, fontSize: 12, cursor: (refreshing || !holdings.length) ? "not-allowed" : "pointer", padding: "4px 10px", borderRadius: 6,
         }}>{refreshing ? "UPDATING..." : "↻ REFRESH"}</button>
-      </div>
+    </div>
     </div>
   );
+}
