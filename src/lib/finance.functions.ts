@@ -469,17 +469,36 @@ interface YahooProfileResult {
   };
 }
 
-async function fetchYahooSector(symbol: string): Promise<{ sector: string; industry: string } | null> {
-  const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=assetProfile`;
+interface WikidataSearchResult {
+  search?: Array<{ id: string }>;
+}
+interface WikidataEntity {
+  claims?: { P452?: Array<{ mainsnak?: { datavalue?: { value?: { id: string } } } }> };
+}
+interface WikidataLabels {
+  entities?: Record<string, { labels?: { en?: { value: string } } }>;
+}
+
+async function fetchIndustryFromWikidata(companyName: string): Promise<string | null> {
   try {
-    const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (StrategicMarkets)" } });
-    if (!r.ok) return null;
-    const j = (await r.json()) as YahooProfileResult;
-    const profile = j.quoteSummary?.result?.[0]?.assetProfile;
-    if (!profile?.sector) return null;
-    return { sector: profile.sector, industry: profile.industry || profile.sector };
+    const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(companyName)}&language=en&format=json&type=item&limit=1`;
+    const sr = await fetch(searchUrl, { headers: { "user-agent": "StrategicMarkets/1.0" } });
+    const sj = (await sr.json()) as WikidataSearchResult;
+    const entityId = sj.search?.[0]?.id;
+    if (!entityId) return null;
+
+    const entityUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${entityId}&props=claims&format=json`;
+    const er = await fetch(entityUrl, { headers: { "user-agent": "StrategicMarkets/1.0" } });
+    const ej = (await er.json()) as { entities?: Record<string, WikidataEntity> };
+    const industryId = ej.entities?.[entityId]?.claims?.P452?.[0]?.mainsnak?.datavalue?.value?.id;
+    if (!industryId) return null;
+
+    const labelUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${industryId}&props=labels&languages=en&format=json`;
+    const lr = await fetch(labelUrl, { headers: { "user-agent": "StrategicMarkets/1.0" } });
+    const lj = (await lr.json()) as WikidataLabels;
+    return lj.entities?.[industryId]?.labels?.en?.value || null;
   } catch (e) {
-    console.warn("[Yahoo profile]", symbol, (e as Error).message);
+    console.warn("[Wikidata industry]", companyName, (e as Error).message);
     return null;
   }
 }
