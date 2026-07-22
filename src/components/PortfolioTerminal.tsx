@@ -1681,7 +1681,7 @@ function AIAdvisorPage({holdings}:any) {
             onKeyDown={e=>{ if(e.key==="Enter") send(); }}
             placeholder="ENTER COMMAND OR QUERY..."
             style={{flex:1,background:"transparent",border:"none",
-              padding:"8px 0",color:B.yellow,fontSize:17,
+              padding:"8px 0",color:B.gray1,fontSize:17,
               fontFamily:"'Courier New',monospace",outline:"none",
               letterSpacing:"0.04em",textTransform:"uppercase"}}/>
           <button onClick={()=>send()} disabled={loading||!input.trim()} style={{
