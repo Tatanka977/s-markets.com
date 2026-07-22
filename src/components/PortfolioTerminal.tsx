@@ -1638,7 +1638,7 @@ function AIAdvisorPage({holdings}:any) {
       <div style={{flex:1,overflowY:"auto",paddingBottom:4}}>
         {msgs.map((m,i)=>(
           <div key={i} style={{padding:"4px 8px",borderBottom:`1px solid ${B.border}`,
-            background:m.role==="user"?"#000822":"transparent"}}>
+            background:m.role==="user"?B.panel2:"transparent"}}>
             <div style={{fontSize:14,color:m.role==="user"?B.blue:B.gray3,fontFamily:"'Courier New',monospace",marginBottom:2,fontWeight:700}}>
               {m.role==="user"?"USER>":"SMKT>"}
             </div>
