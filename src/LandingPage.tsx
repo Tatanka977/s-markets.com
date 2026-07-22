@@ -12,9 +12,14 @@ export default function LandingPage() {
             Strategic Markets
           </div>
 
-          <a className="btn btn-primary" href="/terminal">
-            Open Terminal
-          </a>
+          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+            <a href="/blog" style={{ textDecoration: "none", color: "inherit", fontSize: 15 }}>
+              Blog
+            </a>
+            <a className="btn btn-primary" href="/terminal">
+              Open Terminal
+            </a>
+          </div>
 
         </div>
       </header>
