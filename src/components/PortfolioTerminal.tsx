@@ -955,7 +955,7 @@ function EditableCell({value, onSave, type="text", format}:any) {
     </span>
   );
 }
-function PortfolioPage({holdings,onRemove,onUpdate,onLoadPortfolio}:any) {
+function PortfolioPage({holdings,onRemove,onUpdate,onLoadPortfolio,onAddCash}:any) {
   const m=useMemo(()=>pMet(holdings),[holdings]);
   const { user } = useUser();
   const [view, setView] = useState<"positions"|"saved">("positions");
@@ -988,9 +988,23 @@ function PortfolioPage({holdings,onRemove,onUpdate,onLoadPortfolio}:any) {
     onLoadPortfolio(p.holdings);
     setView("positions");
   };
-
+const addCash = () => {
+    const input = window.prompt("Amount of cash to add (USD):", "1000");
+    if (!input) return;
+    const amount = parseFloat(input);
+    if (isNaN(amount) || amount <= 0) return;
+    const cashAsset = {
+      ticker: "CASH", symbol: "CASH", shortName: "Cash",
+      price: 1, previousClose: 1, dayChangePct: 0,
+      currency: "USD", exchange: "—", marketCap: null, pe: null, dividendYield: 0,
+      geo: "CASH", sector: "Cash", industry: "Cash", type: "Cash", category: "CASH",
+      ytd: 0, vol: 0, beta: 0, er: 0, dy: 0,
+    };
+    onAddCash(cashAsset, amount, 1, new Date().toISOString().slice(0,10));
+  };
   const Tabs = (
-    <div style={{display:"flex",gap:16,borderBottom:`1px solid ${B.border}`,padding:"0 4px",flexShrink:0}}>
+    <div style={{display:"flex",gap:16,borderBottom:`1px solid ${B.border}`,padding:"0 4px",flexShrink:0,alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{display:"flex",gap:16}}>
       {(["positions","saved"] as const).map(v=>(
         <button key={v} onClick={()=>setView(v)} style={{
           padding:"12px 4px",background:"none",border:"none",
@@ -2134,7 +2148,7 @@ export default function PortfolioTerminal() {
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
             {page==="home"       && <HomePage     holdings={holdings} setPage={setPage} onRefresh={refreshPrices} refreshing={refreshing}/>}
             {page==="search"     && <SearchPage   onAdd={addToPortfolio} portfolio={holdings}/>}
-            {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio} onUpdate={updateHolding} onLoadPortfolio={setHoldings}/>}
+            {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio} onUpdate={updateHolding} onLoadPortfolio={setHoldings} onAddCash={addToPortfolio}/>}
             {page==="analysis"   && <AnalysisPage  holdings={holdings} setPage={setPage}/>}
             {page==="ai"         && <AIAdvisorPage holdings={holdings}/>}
             {page==="news"       && <NewsPage holdings={holdings} setPage={setPage}/>}
