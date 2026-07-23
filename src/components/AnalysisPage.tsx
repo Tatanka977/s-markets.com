@@ -242,9 +242,27 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
               <BPanel title="WHAT-IF ANALYSIS">
                 <div style={{ padding: "10px 12px" }}>
                   <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                    <input value={whatIfTicker} onChange={e => setWhatIfTicker(e.target.value.toUpperCase())}
-                      onKeyDown={e => e.key === "Enter" && runWhatIf()}
-                      placeholder="ADD TICKER" style={{ flex: 1, background: B.panel2, border: `1px solid ${B.border}`, color: B.gray1, padding: "6px 8px", fontFamily: FONT, fontSize: 12, borderRadius: 6 }} />
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <input value={whatIfTicker} onChange={e => handleTickerInput(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && runWhatIf()}
+                        onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                        placeholder="SEARCH TICKER..." style={{ width: "100%", background: B.panel2, border: `1px solid ${B.border}`, color: B.gray1, padding: "6px 8px", fontFamily: FONT, fontSize: 12, borderRadius: 6 }} />
+                      {showSuggestions && suggestions.length > 0 && (
+                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20,
+                          background: B.panel, border: `1px solid ${B.border}`, borderRadius: 6, marginTop: 2, maxHeight: 200, overflowY: "auto" }}>
+                          {suggestions.slice(0, 8).map((r: any) => (
+                            <div key={r.symbol} onClick={() => pickSuggestion(r)} style={{
+                              padding: "6px 10px", cursor: "pointer", fontFamily: FONT, fontSize: 12,
+                              borderBottom: `1px solid ${B.border}`,
+                            }}>
+                              <span style={{ color: B.blue, fontWeight: 700 }}>{r.symbol}</span>
+                              <span style={{ color: B.gray3, marginLeft: 6 }}>{r.shortName}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <input value={whatIfAmount} onChange={e => setWhatIfAmount(e.target.value)}
                       onKeyDown={e => e.key === "Enter" && runWhatIf()}
                       type="number" placeholder="AMOUNT" style={{ width: 90, background: B.panel2, border: `1px solid ${B.border}`, color: B.gray1, padding: "6px 8px", fontFamily: FONT, fontSize: 12, borderRadius: 6 }} />
