@@ -1,5 +1,14 @@
 // @ts-nocheck
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import {
+  searchSecurities as srvSearch,
+  fetchQuote as srvQuote,
+  batchRefresh as srvBatch,
+  fetchMarketStatus as srvMarketStatus,
+  fetchHistoricalPrice as srvHistorical,
+  fetchFxRates as srvFx,
+  fetchPriceHistory,
+} from "@/lib/finance.functions";
 import AnalysisPage from "./AnalysisPage";
 import HomePage from "./HomePage";
 import { getInvestorProfile } from "@/lib/profile.functions";
@@ -480,7 +489,96 @@ export function IndicesOverview() {
     </BPanel>
   );
 }
+const RANGES = [
+  {id:"1d",label:"1D",interval:"5m"},
+  {id:"5d",label:"5D",interval:"15m"},
+  {id:"1mo",label:"1M",interval:"1d"},
+  {id:"3mo",label:"3M",interval:"1d"},
+  {id:"6mo",label:"6M",interval:"1d"},
+  {id:"ytd",label:"YTD",interval:"1d"},
+  {id:"1y",label:"1Y",interval:"1d"},
+  {id:"2y",label:"2Y",interval:"1wk"},
+  {id:"5y",label:"5Y",interval:"1wk"},
+  {id:"max",label:"MAX",interval:"1mo"},
+];
 
+function PricePerformancePanel({symbol, currency}:any) {
+  const [range, setRange] = useState("1mo");
+  const [showBenchmark, setShowBenchmark] = useState(true);
+  const [series, setSeries] = useState<any[]>([]);
+  const [benchSeries, setBenchSeries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const r = RANGES.find(x=>x.id===range)!;
+    setLoading(true);
+    Promise.all([
+      fetchPriceHistory({data:{symbol, range:r.id, interval:r.interval}}),
+      showBenchmark ? fetchPriceHistory({data:{symbol:"SPY", range:r.id, interval:r.interval}}) : Promise.resolve([]),
+    ]).then(([s, b]) => {
+      if (!alive) return;
+      setSeries(s || []);
+      setBenchSeries(b || []);
+      setLoading(false);
+    }).catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [symbol, range, showBenchmark]);
+
+  // Normalize both series to % change from their own first point, so they're comparable regardless of price scale
+  const chartData = useMemo(() => {
+    if (!series.length) return [];
+    const base = series[0].close;
+    const benchBase = benchSeries[0]?.close;
+    return series.map((p, i) => ({
+      t: p.t,
+      label: new Date(p.t).toLocaleDateString(undefined, range==="1d"||range==="5d" ? {hour:"2-digit",minute:"2-digit"} : {month:"short",day:"numeric"}),
+      value: ((p.close - base) / base) * 100,
+      benchmark: benchSeries[i] != null && benchBase != null ? ((benchSeries[i].close - benchBase) / benchBase) * 100 : null,
+    }));
+  }, [series, benchSeries, range]);
+
+  return (
+    <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"16px 18px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:10}}>
+        <span style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace"}}>PRICE PERFORMANCE</span>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:B.gray2,fontFamily:"'Courier New',monospace",cursor:"pointer"}}>
+          <input type="checkbox" checked={showBenchmark} onChange={e=>setShowBenchmark(e.target.checked)}/>
+          Compare to S&amp;P 500
+        </label>
+      </div>
+
+      <div style={{display:"flex",gap:2,marginBottom:10,flexWrap:"wrap"}}>
+        {RANGES.map(r=>(
+          <button key={r.id} onClick={()=>setRange(r.id)} style={{
+            background: range===r.id ? B.blue : "transparent", color: range===r.id ? B.white : B.gray2,
+            border:"none", fontSize:11, fontWeight:700, padding:"4px 8px", borderRadius:6,
+            cursor:"pointer", fontFamily:"'Courier New',monospace",
+          }}>{r.label}</button>
+        ))}
+      </div>
+
+      <div style={{height:220}}>
+        {loading ? (
+          <div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:B.gray3,fontFamily:"'Courier New',monospace",fontSize:12}}>LOADING…</div>
+        ) : !chartData.length ? (
+          <div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:B.gray3,fontFamily:"'Courier New',monospace",fontSize:12}}>No historical data available for this range.</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <XAxis dataKey="label" tick={{fontSize:10,fill:B.gray3}} minTickGap={30}/>
+              <YAxis tick={{fontSize:10,fill:B.gray3}} tickFormatter={(v)=>`${v.toFixed(0)}%`}/>
+              <Tooltip formatter={(v:any)=>`${v.toFixed(2)}%`} contentStyle={{fontFamily:"'Courier New',monospace",fontSize:12}}/>
+              <ReferenceLine y={0} stroke={B.border}/>
+              <Line type="monotone" dataKey="value" stroke={B.blue} strokeWidth={2} dot={false} name={symbol}/>
+              {showBenchmark && <Line type="monotone" dataKey="benchmark" stroke={B.gray3} strokeWidth={1.5} dot={false} name="S&P 500"/>}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
 function SearchPage({onAdd,portfolio}:any) {
   const [q,setQ] = useState<string>("");
   const [results,setRes] = useState<any[]>([]);
@@ -663,17 +761,7 @@ useEffect(()=>{
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14}}>
-        {/* Price performance (honest placeholder) */}
-        <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"16px 18px"}}>
-          <div style={{fontSize:13,fontWeight:700,color:B.blue,letterSpacing:"0.06em",fontFamily:"'Courier New',monospace",marginBottom:10}}>
-            PRICE PERFORMANCE
-          </div>
-          <div style={{height:220,display:"flex",alignItems:"center",justifyContent:"center",background:B.panel2,borderRadius:8}}>
-            <div style={{fontSize:12,color:B.gray3,fontFamily:"'Courier New',monospace",textAlign:"center",padding:"0 20px",lineHeight:1.6}}>
-              A full historical chart with benchmark comparison is coming soon — we currently only fetch a single historical close price at a time, not a full time series.
-            </div>
-          </div>
-        </div>
+        <PricePerformancePanel symbol={detail.ticker} currency={detail.currency}/>
 
         {/* Key metrics */}
         <div style={{background:B.panel,border:`1px solid ${B.border}`,borderRadius:12,padding:"16px 18px"}}>
