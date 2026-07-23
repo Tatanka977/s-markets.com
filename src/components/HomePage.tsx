@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
 import {
   B, fmt, fmtM, pCol, pSign, pMet, BPanel,
 } from "@/lib/uiShared";
@@ -264,15 +265,16 @@ function PerformancePanel({ holdings }: any) {
           </div>
         </div>
       ) : (
-        <div style={{ height: 180 }}>
+        <div style={{ height: 280, width: "100%" }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={filtered}>
-              <XAxis dataKey="label" tick={{fontSize:10,fill:B.gray3}} minTickGap={40}/>
-              <YAxis tick={{fontSize:10,fill:B.gray3}} tickFormatter={(v)=>`${v.toFixed(0)}%`}/>
-              <Tooltip formatter={(v:any)=>v!=null?`${v.toFixed(2)}%`:"—"} contentStyle={{fontFamily:FONT,fontSize:12}}/>
+            <LineChart data={filtered} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+              <XAxis dataKey="label" tick={{fontSize:11,fill:B.gray3}} minTickGap={50} axisLine={{stroke:B.border}} tickLine={false}/>
+              <YAxis tick={{fontSize:11,fill:B.gray3}} tickFormatter={(v)=>`${v.toFixed(0)}%`} axisLine={false} tickLine={false} width={45}/>
+              <Tooltip formatter={(v:any)=>v!=null?`${v.toFixed(2)}%`:"—"} contentStyle={{fontFamily:FONT,fontSize:12,borderRadius:8}}/>
               <ReferenceLine y={0} stroke={B.border}/>
-              <Line type="monotone" dataKey="portfolio" stroke={B.blue} strokeWidth={2} dot={false} name="Your Portfolio"/>
+              <Line type="monotone" dataKey="portfolio" stroke={B.blue} strokeWidth={2.5} dot={false} name="Your Portfolio"/>
               <Line type="monotone" dataKey="benchmark" stroke={B.gray3} strokeWidth={1.5} dot={false} name="S&P 500"/>
+              <Legend wrapperStyle={{fontSize:12,fontFamily:FONT}}/>
             </LineChart>
           </ResponsiveContainer>
         </div>
