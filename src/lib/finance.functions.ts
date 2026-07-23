@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export type Category = "STOCK" | "ETF" | "BOND" | "COMMODITY" | "CRYPTO" | "REIT" | "FX";
+export type Category = "STOCK" | "ETF" | "BOND" | "COMMODITY" | "CRYPTO" | "REIT" | "FX" | "CASH";
 
-export const CATEGORIES: Category[] = ["STOCK","ETF","BOND","COMMODITY","CRYPTO","REIT","FX"];
+export const CATEGORIES: Category[] = ["STOCK","ETF","BOND","COMMODITY","CRYPTO","REIT","FX","CASH"];
 
 export interface SearchResult {
   symbol: string;
