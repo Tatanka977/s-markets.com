@@ -71,8 +71,9 @@ function AuthPage() {
       alignItems: "center", justifyContent: "center", padding: 16, fontFamily: fontMono }}>
       <div style={{ width: "100%", maxWidth: 380, background: B.panel, border: `1px solid ${B.border}`, borderRadius: 12, overflow: "hidden" }}>
         <div style={{ background: B.blue, padding: "14px 16px" }}>
-          <div style={{ transform: "scale(0.85)", transformOrigin: "left", filter: "brightness(0) invert(1)" }}>
-            <LogoWithText textSize={17} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <img src="/sm-icon.png" alt="" style={{ height: 22, width: "auto", filter: "brightness(0) invert(1)" }} />
+            <span style={{ fontSize: 17, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.01em" }}>Strategic Markets</span>
           </div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>
             {mode === "signin" ? "SIGN IN TO TERMINAL" : "CREATE ACCOUNT"}
