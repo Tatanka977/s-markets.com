@@ -928,8 +928,34 @@ useEffect(()=>{
     </div>
   );
 }
+function EditableCell({value, onSave, type="text", format}:any) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value ?? ""));
 
-function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
+  if (editing) {
+    return (
+      <input
+        autoFocus type={type} value={draft}
+        onChange={e=>setDraft(e.target.value)}
+        onBlur={()=>{ setEditing(false); onSave(draft); }}
+        onKeyDown={e=>{
+          if (e.key==="Enter") { setEditing(false); onSave(draft); }
+          if (e.key==="Escape") { setEditing(false); setDraft(String(value ?? "")); }
+        }}
+        style={{width:"100%",textAlign:"right",background:B.panel2,border:`1px solid ${B.blue}`,
+          color:B.gray1,borderRadius:4,padding:"2px 4px",fontSize:12,fontFamily:"'Courier New',monospace"}}
+      />
+    );
+  }
+  return (
+    <span onClick={()=>{setDraft(String(value ?? "")); setEditing(true);}} style={{
+      cursor:"pointer",borderBottom:`1px dashed ${B.border}`,
+    }} title="Click to edit">
+      {format ? format(value) : value}
+    </span>
+  );
+}
+function PortfolioPage({holdings,onRemove,onUpdate,onLoadPortfolio}:any) {
   const m=useMemo(()=>pMet(holdings),[holdings]);
   const { user } = useUser();
   const [view, setView] = useState<"positions"|"saved">("positions");
@@ -1195,9 +1221,27 @@ function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
                     <td style={{padding:"6px",textAlign:"right",color:plPct!=null?pCol(plPct):B.gray3}}>
                       {plPct!=null?`${pSign(fmt(plPct,1))}%`:"—"}
                     </td>
-                    <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{h.costPrice!=null?h.costPrice.toFixed(2):"—"}</td>
-                    <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{fmt(h.qty,h.qty<1?4:2)}</td>
-                    <td style={{padding:"6px",textAlign:"right",color:B.gray3}}>{h.buyDate?new Date(h.buyDate).toLocaleDateString():"—"}</td>
+                    <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>
+  <EditableCell
+    value={h.costPrice} type="number"
+    format={(v:any)=>v!=null&&v!==""?parseFloat(v).toFixed(2):"—"}
+    onSave={(v:string)=>{ const n=parseFloat(v); if(!isNaN(n)&&n>=0) onUpdate(h.isin||h.asset.ticker,{costPrice:n}); }}
+  />
+</td>
+<td style={{padding:"6px",textAlign:"right",color:B.gray1}}>
+  <EditableCell
+    value={h.qty} type="number"
+    format={(v:any)=>v!=null?fmt(v, v<1?4:2):"—"}
+    onSave={(v:string)=>{ const n=parseFloat(v); if(!isNaN(n)&&n>0) onUpdate(h.isin||h.asset.ticker,{qty:n}); }}
+  />
+</td>
+<td style={{padding:"6px",textAlign:"right",color:B.gray3}}>
+  <EditableCell
+    value={h.buyDate ? h.buyDate.slice(0,10) : ""} type="date"
+    format={(v:any)=>v?new Date(v).toLocaleDateString():"—"}
+    onSave={(v:string)=>{ if(v) onUpdate(h.isin||h.asset.ticker,{buyDate:v}); }}
+  />
+</td>
                     <td style={{padding:"6px",textAlign:"center"}}>
                       <button onClick={()=>onRemove(h.isin||h.asset.ticker)} style={{
                         background:"none",border:`1px solid ${B.border}`,color:B.gray3,borderRadius:6,
@@ -2005,6 +2049,20 @@ export default function PortfolioTerminal() {
   const removeFromPortfolio = useCallback((key:string) =>
     setHoldings(h => h.filter(x => x.isin!==key && x.asset.ticker!==key)), []);
 
+  const updateHolding = useCallback((key:string, patch: {qty?:number; costPrice?:number; buyDate?:string}) => {
+    setHoldings(prev => prev.map(h => {
+      if (h.isin!==key && h.asset.ticker!==key) return h;
+      const qty = patch.qty!=null ? patch.qty : h.qty;
+      const costPrice = patch.costPrice!=null ? patch.costPrice : h.costPrice;
+      const buyDate = patch.buyDate!=null ? patch.buyDate : h.buyDate;
+      return {
+        ...h, qty, costPrice, buyDate,
+        costBasis: qty * (costPrice||0),
+        value: qty * (h.asset.price ?? costPrice ?? 0),
+      };
+    }));
+  }, []);
+
   // Stable callback — no holdings dep, reads from ref. Won't recreate on each price tick.
   const refreshPrices = useCallback(async () => {
     const cur = holdingsRef.current;
@@ -2059,7 +2117,7 @@ export default function PortfolioTerminal() {
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
             {page==="home"       && <HomePage     holdings={holdings} setPage={setPage} onRefresh={refreshPrices} refreshing={refreshing}/>}
             {page==="search"     && <SearchPage   onAdd={addToPortfolio} portfolio={holdings}/>}
-            {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio} onLoadPortfolio={setHoldings}/>}
+            {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio} onUpdate={updateHolding} onLoadPortfolio={setHoldings}/>}
             {page==="analysis"   && <AnalysisPage  holdings={holdings}/>}
             {page==="ai"         && <AIAdvisorPage holdings={holdings}/>}
             {page==="news"       && <NewsPage holdings={holdings} setPage={setPage}/>}
