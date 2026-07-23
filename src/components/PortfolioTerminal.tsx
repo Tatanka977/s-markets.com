@@ -1914,7 +1914,7 @@ Max 180 words. Respond in ENGLISH.`;
 
       <div style={{flex:1,overflowY:"auto",paddingBottom:80}}>
         {sentiment && (
-          <div style={{padding:"8px 10px",borderBottom:`1px solid ${B.cyan}`,background:"#001a1a"}}>
+          <div style={{padding:"8px 10px",borderBottom:`1px solid ${B.cyan}`,background:B.panel2}}>
             <div style={{fontSize:14,color:B.cyan,fontFamily:"'Courier New',monospace",fontWeight:700,marginBottom:4,letterSpacing:"0.08em"}}>
               ✦ STRATEGIC MARKETS AI SENTIMENT
             </div>
