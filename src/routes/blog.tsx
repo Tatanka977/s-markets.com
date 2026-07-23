@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { LogoWithText } from "@/components/Logo";
 import { useEffect, useState } from "react";
 import { useTheme } from "@/hooks/useTheme";
 import { useUser } from "@/hooks/useUser";
@@ -141,7 +142,7 @@ function BlogIndexPage() {
       <header className="header">
         <div className="container nav">
           <a href="/" className="logo" style={{ textDecoration: "none" }}>
-            <span className="logo-accent">Strategic</span> <span className="logo-muted">Markets</span>
+            <LogoWithText />
           </a>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <ThemeToggle />
@@ -219,7 +220,7 @@ function BlogIndexPage() {
       <footer>
         <div className="container footer-grid">
           <div className="logo footer-logo">
-            <span className="logo-accent">Strategic</span> <span className="logo-muted-footer">Markets</span>
+            <LogoWithText iconSize={22} textSize={16} />
           </div>
           <div className="footer-copy">© 2026 Strategic Markets. All rights reserved.</div>
           <div className="footer-links">
