@@ -88,7 +88,7 @@ export default function LandingPage() {
                 Launch Platform <span className="btn-arrow">→</span>
               </a>
 
-              href="#features"
+              <a href="#features"
                 className="btn btn-secondary"
                 onClick={(e) => {
                   e.preventDefault();
