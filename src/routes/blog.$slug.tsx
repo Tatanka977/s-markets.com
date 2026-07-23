@@ -1,11 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useTheme } from "@/hooks/useTheme";
-import { getPostBySlug } from "@/blogPosts";
+import { getBlogPostBySlug } from "@/lib/blog.functions";
 import "../LandingPage.css";
 
 export const Route = createFileRoute("/blog/$slug")({
-  loader: ({ params }) => {
-    const post = getPostBySlug(params.slug);
+  loader: async ({ params }) => {
+    const post = await getBlogPostBySlug(params.slug);
     if (!post) throw notFound();
     return post;
   },
@@ -70,15 +70,15 @@ function BlogPostPage() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 24, marginBottom: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13, opacity: 0.6 }}>
-              {new Date(post.date).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+              {new Date(post.created_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
             </span>
-            {post.sourceName && (
+            {post.source_name && (
               <span style={{
                 fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
                 padding: "2px 8px", borderRadius: 999,
                 background: "rgba(59,130,246,0.1)", color: "#3b82f6",
               }}>
-                via {post.sourceName}
+                via {post.source_name}
               </span>
             )}
           </div>
@@ -91,10 +91,10 @@ function BlogPostPage() {
             ))}
           </div>
 
-          {post.sourceUrl && (
+          {post.source_url && (
             <div style={{ marginTop: 30, paddingTop: 20, borderTop: "1px solid rgba(128,128,128,0.2)" }}>
-              <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 14, color: "#3b82f6", textDecoration: "none" }}>
-                Original source: {post.sourceName || "link"} →
+              <a href={post.source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 14, color: "#3b82f6", textDecoration: "none" }}>
+                Original source: {post.source_name || "link"} →
               </a>
             </div>
           )}
@@ -115,3 +115,5 @@ function BlogPostPage() {
         </div>
       </footer>
     </div>
+  );
+}
