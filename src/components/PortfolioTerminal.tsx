@@ -1303,7 +1303,8 @@ function AIAdvisorPage({holdings}:any) {
     const apiMsgs=newMsgs.map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.content}));
     apiMsgs[apiMsgs.length-1].content=`[LIVE PORTFOLIO]\n${portCtx()}\n\n[QUERY]\n${msg}`;
     try {
-      const { reply } = await aiChat({ data: { messages: apiMsgs, system: SYS_PROMPT } });
+      const sys = await buildSysPrompt();
+      const { reply } = await aiChat({ data: { messages: apiMsgs, system: sys } });
       setMsgs(m=>[...m,{role:"assistant",content:reply}]);
     } catch(e:any) {
       setMsgs(m=>[...m,{role:"assistant",content:`ERROR: ${e.message}`}]);
