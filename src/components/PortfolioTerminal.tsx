@@ -1197,7 +1197,7 @@ function PortfolioPage({holdings,onRemove,onLoadPortfolio}:any) {
                     </td>
                     <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{h.costPrice!=null?h.costPrice.toFixed(2):"—"}</td>
                     <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{fmt(h.qty,h.qty<1?4:2)}</td>
-                    <td style={{padding:"6px",textAlign:"right",color:B.gray3}}>{h.buyDt?new Date(h.buyDt).toLocaleDateString():"—"}</td>
+                    <td style={{padding:"6px",textAlign:"right",color:B.gray3}}>{h.buyDate?new Date(h.buyDate).toLocaleDateString():"—"}</td>
                     <td style={{padding:"6px",textAlign:"center"}}>
                       <button onClick={()=>onRemove(h.isin||h.asset.ticker)} style={{
                         background:"none",border:`1px solid ${B.border}`,color:B.gray3,borderRadius:6,
