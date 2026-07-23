@@ -158,8 +158,8 @@ function PhoneShell({children}:any) {
     return()=>clearInterval(t);
   },[]);
   return (
-    <div className="sm-shell" style={{background:B.bg,minHeight:"100vh",display:"flex",flexDirection:"column",
-      fontFamily:"'Courier New',Courier,monospace"}}>
+    <div className="sm-shell" style={{background:B.bg,height:"100dvh",display:"flex",flexDirection:"column",
+      fontFamily:"'Courier New',Courier,monospace",overflow:"hidden"}}>
       {children(time)}
       <style>{`
         @keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
