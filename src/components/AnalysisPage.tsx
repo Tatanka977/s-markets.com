@@ -1,12 +1,12 @@
 import { useState, useMemo, useRef } from "react";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, Legend } from "recharts";
 import {
   B, fmt, fmtM, pCol, pSign, groupBy, pMet, PIE_COLS,
   BPanel, FKey, computeAlerts, SEV_STYLE,
 } from "@/lib/uiShared";
 import { aiChat } from "@/lib/ai.functions";
 import { getInvestorProfile } from "@/lib/profile.functions";
-import { fetchQuote as srvQuote, searchSecurities as srvSearch } from "@/lib/finance.functions";
+import { fetchQuote as srvQuote, searchSecurities as srvSearch, fetchPriceHistory as srvPriceHistory } from "@/lib/finance.functions";
 import { usePersistentState } from "@/hooks/usePersistentState";
 const FONT = "'Courier New', Courier, monospace";
 
@@ -66,7 +66,311 @@ function AllocationPanel({ title, data }: { title: string; data: { name: string;
     </BPanel>
   );
 }
+function PerformanceTab({ holdings, m }: any) {
+  const [range, setRange] = useState<"1M"|"3M"|"6M"|"YTD"|"1Y"|"3Y"|"5Y"|"ALL">("YTD");
+  const [view, setView] = useState<"return"|"value"|"drawdown">("return");
+  const [series, setSeries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
 
+  useEffect(() => {
+    let alive = true;
+    const withDates = holdings.filter((h:any) => h.buyDate);
+    if (!withDates.length) { setLoading(false); setSeries([]); return; }
+    setLoading(true);
+    const earliest = withDates.reduce((min:string,h:any)=> h.buyDate < min ? h.buyDate : min, withDates[0].buyDate);
+
+    Promise.all([
+      srvPriceHistory({ data: { symbol: "SPY", range: "max", interval: "1d" } }),
+      ...withDates.map((h:any) =>
+        srvPriceHistory({ data: { symbol: h.asset.ticker, range: "max", interval: "1d" } })
+          .then((s:any) => ({ ticker: h.asset.ticker, qty: h.qty, buyDate: h.buyDate, series: s || [] }))
+      ),
+    ]).then(([spy, ...perHolding]: any) => {
+      if (!alive) return;
+      const earliestT = new Date(earliest).getTime();
+      const days = (spy || []).filter((p:any) => p.t >= earliestT).map((p:any) => p.t);
+      const pointers = perHolding.map(() => 0);
+
+      const built = days.map((t:number) => {
+        let val = 0;
+        perHolding.forEach((h:any, idx:number) => {
+          if (new Date(h.buyDate).getTime() > t) return;
+          while (pointers[idx]+1 < h.series.length && h.series[pointers[idx]+1].t <= t) pointers[idx]++;
+          const price = h.series[pointers[idx]]?.close;
+          if (price != null) val += price * h.qty;
+        });
+        return { t, val };
+      }).filter((d:any) => d.val > 0);
+
+      setSeries(built.map((d:any) => {
+        const spyPoint = spy.reduce((best:any,p:any)=> (p.t<=d.t ? p : best), null);
+        return { t: d.t, val: d.val, spyClose: spyPoint?.close ?? null };
+      }));
+      setLoading(false);
+    }).catch(() => { if (alive) setLoading(false); });
+
+    return () => { alive = false; };
+  }, [holdings]);
+
+  const filtered = useMemo(() => {
+    if (!series.length) return [];
+    const cutoffDays: Record<string, number> = {"1M":30,"3M":90,"6M":180,"1Y":365,"3Y":1095,"5Y":1825,"YTD":9999,"ALL":100000};
+    const now = Date.now();
+    let f = series;
+    if (range === "YTD") f = series.filter((d:any) => new Date(d.t).getFullYear() === new Date().getFullYear());
+    else if (range !== "ALL") f = series.filter((d:any) => (now - d.t) <= cutoffDays[range]*86400000);
+    if (f.length < 2) return [];
+    const base = f[0].val;
+    const spyBase = f[0].spyClose;
+    let peak = f[0].val;
+    return f.map((d:any) => {
+      peak = Math.max(peak, d.val);
+      return {
+        label: new Date(d.t).toLocaleDateString(undefined,{month:"short",day:"numeric"}),
+        t: d.t,
+        value: d.val,
+        portfolio: base ? ((d.val-base)/base)*100 : 0,
+        benchmark: (d.spyClose!=null && spyBase!=null) ? ((d.spyClose-spyBase)/spyBase)*100 : null,
+        drawdown: peak>0 ? ((d.val-peak)/peak)*100 : 0,
+      };
+    });
+  }, [series, range]);
+
+  const stats = useMemo(() => {
+    if (filtered.length < 2) return null;
+    const first = filtered[0], last = filtered[filtered.length-1];
+    const portfolioReturn = last.portfolio;
+    const benchmarkReturn = last.benchmark ?? 0;
+    const alpha = portfolioReturn - benchmarkReturn;
+    const totalGain = last.value - (first.value / (1+first.portfolio/100));
+    const maxDD = Math.min(...filtered.map((d:any)=>d.drawdown));
+
+    const days = (last.t - first.t) / 86400000;
+    const years = Math.max(days/365, 1/365);
+    const cagr = (Math.pow(last.value/first.value, 1/years) - 1) * 100;
+
+    const dailyReturns:number[] = [];
+    for (let i=1;i<filtered.length;i++) dailyReturns.push((filtered[i].value-filtered[i-1].value)/filtered[i-1].value);
+    const downside = dailyReturns.filter(r=>r<0);
+    const downsideDev = downside.length ? Math.sqrt(downside.reduce((s,r)=>s+r*r,0)/downside.length) * Math.sqrt(252) * 100 : 0;
+    const meanDaily = dailyReturns.reduce((s,r)=>s+r,0)/(dailyReturns.length||1);
+    const annualizedRet = meanDaily*252*100;
+    const sortino = downsideDev>0 ? annualizedRet/downsideDev : 0;
+    const calmar = maxDD<0 ? cagr/Math.abs(maxDD) : 0;
+
+    const monthMap = new Map<string,{first:number;last:number}>();
+    filtered.forEach((d:any) => {
+      const key = new Date(d.t).toISOString().slice(0,7);
+      if (!monthMap.has(key)) monthMap.set(key, {first:d.value, last:d.value});
+      else monthMap.get(key)!.last = d.value;
+    });
+    const months = Array.from(monthMap.values());
+    const winningMonths = months.filter(mo => mo.last >= mo.first).length;
+
+    return { portfolioReturn, benchmarkReturn, alpha, totalGain, maxDD, cagr, sortino, calmar, winningMonths, totalMonths: months.length };
+  }, [filtered]);
+
+  const perHoldingReturn = useMemo(() => {
+    return holdings
+      .filter((h:any) => h.costPrice != null && h.asset.price != null)
+      .map((h:any) => ({
+        ticker: h.asset.ticker,
+        pct: ((h.asset.price - h.costPrice) / h.costPrice) * 100,
+        contribution: m.total > 0 ? ((h.value - h.costPrice*h.qty) / m.total) * 100 : 0,
+        sector: h.asset.sector || h.asset.industry || "OTHER",
+      }))
+      .sort((a:any,b:any) => b.contribution - a.contribution);
+  }, [holdings, m]);
+
+  const sectorAttribution = useMemo(() => {
+    const map = new Map<string, number>();
+    perHoldingReturn.forEach((h:any) => map.set(h.sector, (map.get(h.sector)||0) + h.contribution));
+    return Array.from(map.entries()).map(([name,value]) => ({name, value})).sort((a,b)=>b.value-a.value);
+  }, [perHoldingReturn]);
+
+  const explainPerformance = async () => {
+    if (!stats) return;
+    setAiBusy(true); setAiText("");
+    try {
+      const sys = `You are STRATEGIC MARKETS AI, an EDUCATIONAL analytics assistant. Explain performance drivers factually and educationally. No personalized advice. Max 200 words. End with: "DISCLAIMER: For educational and informational purposes only. Not investment advice."`;
+      const prompt = `Portfolio performance summary: return ${fmt(stats.portfolioReturn,1)}% vs S&P 500 ${fmt(stats.benchmarkReturn,1)}% (alpha ${pSign(fmt(stats.alpha,1))}%). CAGR ${fmt(stats.cagr,1)}%, max drawdown ${fmt(stats.maxDD,1)}%, Sortino ${fmt(stats.sortino,2)}, Calmar ${fmt(stats.calmar,2)}. Top contributors: ${perHoldingReturn.slice(0,3).map((h:any)=>`${h.ticker} ${pSign(fmt(h.contribution,1))}pp`).join(", ")}. Explain what's driving this performance and what it illustrates educationally.`;
+      const { reply } = await aiChat({ data: { messages: [{ role:"user", content: prompt }], system: sys } });
+      setAiText(reply);
+    } catch (e:any) { setAiText("AI error: " + e.message); }
+    finally { setAiBusy(false); }
+  };
+
+  if (loading) return (
+    <div style={{ padding: 30, textAlign: "center", color: B.gray3, fontFamily: FONT, fontSize: 13 }}>LOADING…</div>
+  );
+  if (!stats) return (
+    <div style={{ padding: 30, textAlign: "center", color: B.gray3, fontFamily: FONT, fontSize: 13, lineHeight: 1.6 }}>
+      Not enough historical price data yet. Add positions with a purchase date to see this view.
+    </div>
+  );
+
+  const best = perHoldingReturn[0];
+  const worst = perHoldingReturn[perHoldingReturn.length-1];
+
+  return (
+    <div>
+      {/* KPI row */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px,1fr))", gap:12,
+        background:B.panel, border:`1px solid ${B.border}`, borderRadius:12, padding:"14px 16px", marginBottom:10 }}>
+        {[
+          {l:"Portfolio Return", v:`${pSign(fmt(stats.portfolioReturn,1))}%`, sub:range, col:pCol(stats.portfolioReturn)},
+          {l:"Benchmark Return", v:`${pSign(fmt(stats.benchmarkReturn,1))}%`, sub:"S&P 500", col:B.gray1},
+          {l:"Alpha", v:`${pSign(fmt(stats.alpha,1))}%`, sub:range, col:pCol(stats.alpha)},
+          {l:"Total Gain", v:`${stats.totalGain>=0?"+":"−"}$${fmtM(Math.abs(stats.totalGain))}`, sub:range, col:pCol(stats.totalGain)},
+          {l:"Best Performer", v:best?.ticker||"—", sub:best?`${pSign(fmt(best.pct,1))}%`:"", col:B.green},
+          {l:"Worst Performer", v:worst?.ticker||"—", sub:worst?`${pSign(fmt(worst.pct,1))}%`:"", col:B.red},
+        ].map((k,i)=>(
+          <div key={i}>
+            <div style={{fontSize:9,color:B.gray3,fontFamily:FONT,textTransform:"uppercase"}}>{k.l}</div>
+            <div style={{fontSize:17,fontWeight:700,color:k.col,fontFamily:FONT}}>{k.v}</div>
+            <div style={{fontSize:10,color:B.gray3,fontFamily:FONT}}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:12, marginBottom:10 }}>
+        {/* Chart */}
+        <BPanel title="PERFORMANCE OVER TIME">
+          <div style={{padding:"10px 12px"}}>
+            <div style={{display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom:8}}>
+              <div style={{display:"flex", gap:2}}>
+                {(["1M","3M","6M","YTD","1Y","3Y","5Y","ALL"] as const).map(r=>(
+                  <button key={r} onClick={()=>setRange(r)} style={{
+                    background:range===r?B.blue:"transparent", color:range===r?B.white:B.gray2,
+                    border:"none", fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:6,
+                    cursor:"pointer", fontFamily:FONT,
+                  }}>{r}</button>
+                ))}
+              </div>
+              <div style={{display:"flex", gap:2}}>
+                {(["value","return","drawdown"] as const).map(v=>(
+                  <button key={v} onClick={()=>setView(v)} style={{
+                    background:view===v?B.blue:"transparent", color:view===v?B.white:B.gray2,
+                    border:`1px solid ${view===v?B.blue:B.border}`, fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:6,
+                    cursor:"pointer", fontFamily:FONT,
+                  }}>{v.toUpperCase()}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{height:260}}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={filtered} margin={{top:8,right:16,bottom:8,left:0}}>
+                  <XAxis dataKey="label" tick={{fontSize:10,fill:B.gray3}} minTickGap={50} tickLine={false}/>
+                  <YAxis tick={{fontSize:10,fill:B.gray3}} tickFormatter={(v)=>view==="value"?`$${fmtM(v)}`:`${v.toFixed(0)}%`} axisLine={false} tickLine={false} width={50}/>
+                  <Tooltip formatter={(v:any)=>view==="value"?`$${fmtM(v)}`:`${v?.toFixed?.(2)}%`} contentStyle={{fontFamily:FONT,fontSize:12,borderRadius:8}}/>
+                  <ReferenceLine y={0} stroke={B.border}/>
+                  {view==="value" ? (
+                    <Line type="monotone" dataKey="value" stroke={B.blue} strokeWidth={2.5} dot={false} name="Portfolio Value"/>
+                  ) : view==="drawdown" ? (
+                    <Line type="monotone" dataKey="drawdown" stroke={B.red} strokeWidth={2} dot={false} name="Drawdown"/>
+                  ) : (
+                    <>
+                      <Line type="monotone" dataKey="portfolio" stroke={B.blue} strokeWidth={2.5} dot={false} name="Portfolio"/>
+                      <Line type="monotone" dataKey="benchmark" stroke={B.gray3} strokeWidth={1.5} dot={false} name="S&P 500"/>
+                    </>
+                  )}
+                  <Legend wrapperStyle={{fontSize:12,fontFamily:FONT}}/>
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </BPanel>
+
+        {/* Performance Summary */}
+        <BPanel title="PERFORMANCE SUMMARY">
+          <div style={{padding:"4px 0"}}>
+            {[
+              {l:"CAGR", v:`${fmt(stats.cagr,1)}%`},
+              {l:"Alpha (vs S&P 500)", v:`${pSign(fmt(stats.alpha,1))}%`, col:pCol(stats.alpha)},
+              {l:"Beta (vs S&P 500)", v:fmt(m.wBeta,2)},
+              {l:"Sharpe Ratio", v:fmt(m.sharpe,2)},
+              {l:"Sortino Ratio", v:fmt(stats.sortino,2)},
+              {l:"Max Drawdown", v:`${fmt(stats.maxDD,1)}%`, col:B.red},
+              {l:"Volatility (Annualized)", v:`${fmt(m.wVol,1)}%`},
+              {l:"Winning Months", v:`${stats.winningMonths} / ${stats.totalMonths}`, col:B.green},
+              {l:"Calmar Ratio", v:fmt(stats.calmar,2)},
+            ].map((row,i)=>(
+              <div key={i} style={{display:"flex", justifyContent:"space-between", padding:"7px 14px", borderBottom:i<8?`1px solid ${B.border}`:"none"}}>
+                <span style={{fontSize:12,color:B.gray3,fontFamily:FONT}}>{row.l}</span>
+                <span style={{fontSize:13,fontWeight:700,color:row.col||B.gray1,fontFamily:FONT}}>{row.v}</span>
+              </div>
+            ))}
+          </div>
+        </BPanel>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:12 }}>
+        {/* Contribution by holding */}
+        <BPanel title="PERFORMANCE CONTRIBUTION BY HOLDING">
+          <div style={{padding:"10px 12px", height:220}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={perHoldingReturn} layout="vertical" margin={{left:10,right:10}}>
+                <XAxis type="number" tick={{fontSize:10,fill:B.gray3}} tickFormatter={(v)=>`${v.toFixed(0)}%`}/>
+                <YAxis type="category" dataKey="ticker" tick={{fontSize:11,fill:B.gray1}} width={50}/>
+                <Tooltip formatter={(v:any)=>`${v.toFixed(2)}pp`} contentStyle={{fontFamily:FONT,fontSize:12}}/>
+                <ReferenceLine x={0} stroke={B.border}/>
+                <Bar dataKey="contribution" name="Contribution to Return">
+                  {perHoldingReturn.map((h:any,i:number)=><Cell key={i} fill={h.contribution>=0?B.green:B.red}/>)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </BPanel>
+
+        {/* Sector attribution */}
+        <BPanel title="RETURN ATTRIBUTION BY SECTOR">
+          <div style={{padding:"10px 12px", display:"flex", gap:10, alignItems:"center"}}>
+            <ResponsiveContainer width={100} height={100}>
+              <PieChart>
+                <Pie data={sectorAttribution.map(s=>({...s,value:Math.abs(s.value)}))} cx="50%" cy="50%" innerRadius={28} outerRadius={44} paddingAngle={1} dataKey="value" strokeWidth={0}>
+                  {sectorAttribution.map((_,i)=><Cell key={i} fill={PIE_COLS[i%PIE_COLS.length]}/>)}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{flex:1}}>
+              {sectorAttribution.slice(0,6).map((s,i)=>(
+                <div key={i} style={{display:"flex", alignItems:"center", gap:6, marginBottom:3}}>
+                  <span style={{width:7,height:7,borderRadius:2,background:PIE_COLS[i%PIE_COLS.length],display:"inline-block"}}/>
+                  <span style={{fontSize:11,color:B.gray1,flex:1,fontFamily:FONT}}>{s.name}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:pCol(s.value),fontFamily:FONT}}>{pSign(fmt(s.value,1))}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </BPanel>
+      </div>
+
+      {/* AI Performance Commentary */}
+      <BPanel title="AI PERFORMANCE COMMENTARY" style={{marginTop:10}}>
+        <div style={{padding:12}}>
+          <button onClick={explainPerformance} disabled={aiBusy} style={{
+            background:"transparent", border:`1px solid ${B.cyan}`, color:B.cyan, padding:"7px 14px",
+            borderRadius:6, cursor:"pointer", fontFamily:FONT, fontSize:12, fontWeight:700, marginBottom:10,
+          }}>{aiBusy?"ANALYZING…":aiText?"↻ REFRESH":"✦ EXPLAIN IN DETAIL"}</button>
+          {aiText ? (
+            <div style={{fontSize:12,color:B.gray1,lineHeight:1.6,fontFamily:FONT}}>
+              {aiText.split("\n").map((line,i)=>{
+                const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                return <div key={i} style={{marginBottom:6}}>{parts.map((p,j)=>p.startsWith("**")&&p.endsWith("**")?<b key={j} style={{color:B.blue}}>{p.slice(2,-2)}</b>:p)}</div>;
+              })}
+            </div>
+          ) : (
+            <div style={{fontSize:12,color:B.gray3,fontFamily:FONT,lineHeight:1.6}}>
+              Tap the button for an AI-generated breakdown of what's driving these numbers — educational only.
+            </div>
+          )}
+        </div>
+      </BPanel>
+    </div>
+  );
+}
 export default function AnalysisPage({ holdings, setPage }: any) {
   const m = useMemo(() => pMet(holdings), [holdings]);
   const [sub, setSub] = useState<"alloc" | "risk" | "perf">("alloc");
@@ -506,11 +810,7 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
           );
         })()}
 
-        {sub === "perf" && (
-          <div style={{ padding: "10px", fontSize: 12, color: B.gray3, fontFamily: FONT, textAlign: "center" }}>
-            Performance view unchanged — see previous release for full P&amp;L breakdown.
-          </div>
-        )}
+        {sub === "perf" && <PerformanceTab holdings={holdings} m={m}/>}
       </div>
     </div>
   );
