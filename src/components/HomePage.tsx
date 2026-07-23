@@ -151,7 +151,7 @@ function PortfolioOverview({ holdings, m, onSave, saving, saveMsg }: any) {
         }}>{saving ? "..." : saveMsg || "SAVE"}</button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 16, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 14 }}>
         <StatField label="Total Portfolio Value" value={hasHoldings ? `$${fmtM(m.total)}` : "—"} />
         <StatField label="Portfolio Return (Exp.)" value={hasHoldings ? `${pSign(fmt(m.wRet,1))}%` : "—"} color={hasHoldings ? pCol(m.wRet) : undefined} />
         <StatField label="Day Change" value={hasHoldings ? `${pSign(fmt(m.wDay,2))}%` : "—"} color={hasHoldings ? pCol(m.wDay) : undefined} />
@@ -385,7 +385,7 @@ export default function HomePage({ holdings, setPage, onRefresh, refreshing }: a
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 14 }}>
         <PortfolioOverview holdings={holdings} m={m} onSave={handleSave} saving={saving} saveMsg={saveMsg} />
         <PerformancePanel holdings={holdings}/>
       </div>
