@@ -6,6 +6,7 @@ import {
 } from "@/lib/uiShared";
 import { aiChat } from "@/lib/ai.functions";
 import { getInvestorProfile } from "@/lib/profile.functions";
+import { fetchQuote as srvQuote } from "@/lib/finance.functions";
 
 const FONT = "'Courier New', Courier, monospace";
 
@@ -73,6 +74,49 @@ export default function AnalysisPage({ holdings }: any) {
   const [aiBusy, setAiBusy] = useState(false);
   const [whatIfTicker, setWhatIfTicker] = useState("");
   const [whatIfAmount, setWhatIfAmount] = useState("5000");
+  const [whatIfQuote, setWhatIfQuote] = useState<any>(null);
+  const [whatIfBusy, setWhatIfBusy] = useState(false);
+  const [whatIfError, setWhatIfError] = useState("");
+
+  const runWhatIf = async () => {
+    if (!whatIfTicker.trim()) return;
+    setWhatIfBusy(true); setWhatIfError(""); setWhatIfQuote(null);
+    try {
+      const q = await srvQuote({ data: { symbol: whatIfTicker.trim().toUpperCase() } });
+      if (q?.price == null) { setWhatIfError("No price data found for this ticker."); return; }
+      setWhatIfQuote(q);
+    } catch (e: any) {
+      setWhatIfError(e.message || "Lookup failed.");
+    } finally {
+      setWhatIfBusy(false);
+    }
+  };
+
+  const whatIf = useMemo(() => {
+    if (!whatIfQuote) return null;
+    const amount = parseFloat(whatIfAmount) || 0;
+    if (amount <= 0) return null;
+
+    const newTotal = m.total + amount;
+    const newSector = whatIfQuote.sector || whatIfQuote.industry || "OTHER";
+    const beforeSectorValue = holdings
+      .filter((h: any) => (h.asset.sector || h.asset.industry || "OTHER") === newSector)
+      .reduce((s: number, h: any) => s + h.value, 0);
+    const afterSectorPct = ((beforeSectorValue + amount) / newTotal) * 100;
+    const beforeSectorPct = m.total > 0 ? (beforeSectorValue / m.total) * 100 : 0;
+
+    const newHoldings = [...holdings, { asset: whatIfQuote, value: amount }];
+    const newHHI = newHoldings.reduce((s: number, h: any) => s + Math.pow((h.value / newTotal) * 100, 2), 0);
+    const oldHHI = m.hhi;
+
+    return {
+      sector: newSector,
+      newWeight: (amount / newTotal) * 100,
+      beforeSectorPct, afterSectorPct,
+      oldHHI, newHHI,
+      newPositionCount: holdings.length + 1,
+    };
+  }, [whatIfQuote, whatIfAmount, holdings, m]);
 
   if (!holdings.length) return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -161,17 +205,59 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
                 </table>
               </BPanel>
 
-              <BPanel title="WHAT-IF ANALYSIS (PREVIEW)">
+              <BPanel title="WHAT-IF ANALYSIS">
                 <div style={{ padding: "10px 12px" }}>
                   <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                     <input value={whatIfTicker} onChange={e => setWhatIfTicker(e.target.value.toUpperCase())}
-                      placeholder="ADD TICKER" style={{ flex: 1, background: B.panel2, border: `1px solid ${B.border}`, color: B.gray1, padding: "6px 8px", fontFamily: FONT, fontSize: 12 }} />
+                      onKeyDown={e => e.key === "Enter" && runWhatIf()}
+                      placeholder="ADD TICKER" style={{ flex: 1, background: B.panel2, border: `1px solid ${B.border}`, color: B.gray1, padding: "6px 8px", fontFamily: FONT, fontSize: 12, borderRadius: 6 }} />
                     <input value={whatIfAmount} onChange={e => setWhatIfAmount(e.target.value)}
-                      placeholder="AMOUNT" style={{ width: 90, background: B.panel2, border: `1px solid ${B.border}`, color: B.gray1, padding: "6px 8px", fontFamily: FONT, fontSize: 12 }} />
+                      onKeyDown={e => e.key === "Enter" && runWhatIf()}
+                      type="number" placeholder="AMOUNT" style={{ width: 90, background: B.panel2, border: `1px solid ${B.border}`, color: B.gray1, padding: "6px 8px", fontFamily: FONT, fontSize: 12, borderRadius: 6 }} />
+                    <button onClick={runWhatIf} disabled={whatIfBusy || !whatIfTicker.trim()} style={{
+                      background: B.blue, border: "none", color: B.white, padding: "6px 14px", borderRadius: 6,
+                      cursor: whatIfBusy ? "wait" : "pointer", fontFamily: FONT, fontSize: 12, fontWeight: 700,
+                    }}>{whatIfBusy ? "..." : "SIMULATE"}</button>
                   </div>
-                  <div style={{ fontSize: 11, color: B.gray3, fontFamily: FONT, lineHeight: 1.6 }}>
-                    This is a preview. Full hypothetical simulation (recomputing sector/risk weights before you commit) is coming soon — for now, add the position from Search to see its real impact.
-                  </div>
+
+                  {whatIfError && (
+                    <div style={{ fontSize: 11, color: B.red, fontFamily: FONT, marginBottom: 8 }}>{whatIfError}</div>
+                  )}
+
+                  {!whatIf ? (
+                    <div style={{ fontSize: 11, color: B.gray3, fontFamily: FONT, lineHeight: 1.6 }}>
+                      Enter a ticker and a hypothetical amount, then tap Simulate to see how it would change your portfolio's sector exposure and concentration — before you actually buy it.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: B.gray3, fontFamily: FONT, textTransform: "uppercase" }}>New Position Weight</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: B.gray1, fontFamily: FONT }}>{fmt(whatIf.newWeight,2)}%</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: B.gray3, fontFamily: FONT, textTransform: "uppercase" }}>{whatIf.sector} Exposure</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: B.gray1, fontFamily: FONT }}>
+                          {fmt(whatIf.beforeSectorPct,1)}% → {fmt(whatIf.afterSectorPct,1)}%
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: whatIf.afterSectorPct>whatIf.beforeSectorPct?B.yellow:B.green, fontFamily: FONT }}>
+                          {pSign(fmt(whatIf.afterSectorPct-whatIf.beforeSectorPct,1))}%
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: B.gray3, fontFamily: FONT, textTransform: "uppercase" }}>Concentration (HHI)</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: B.gray1, fontFamily: FONT }}>
+                          {whatIf.oldHHI.toFixed(0)} → {whatIf.newHHI.toFixed(0)}
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: whatIf.newHHI>whatIf.oldHHI?B.yellow:B.green, fontFamily: FONT }}>
+                          {whatIf.newHHI>whatIf.oldHHI?"More concentrated":"More diversified"}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: B.gray3, fontFamily: FONT, textTransform: "uppercase" }}>Total Positions</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: B.gray1, fontFamily: FONT }}>{holdings.length} → {whatIf.newPositionCount}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </BPanel>
             </div>
