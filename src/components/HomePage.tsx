@@ -167,59 +167,76 @@ function PortfolioOverview({ holdings, m, onSave, saving, saveMsg }: any) {
   );
 }
 
-function PerformancePanel({ m, holdings }: any) {
-  const [range, setRange] = useState<"1M"|"3M"|"6M"|"YTD"|"1Y"|"ALL">("YTD");
-  const [snapshots, setSnapshots] = useState<{snapshot_date:string;total_value:number}[]>([]);
-  const [spySeries, setSpySeries] = useState<any[]>([]);
+function PerformancePanel({ holdings }: any) {
+  const [range, setRange] = useState<"1M"|"3M"|"6M"|"YTD"|"1Y"|"ALL">("ALL");
+  const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useUser();
-
-  // Save today's snapshot once per app open (idempotent — upsert overwrites same-day row)
-  useEffect(() => {
-    if (!user || !holdings.length || !m) return;
-    const today = new Date().toISOString().slice(0,10);
-    upsertSnapshot({ data: { date: today, value: m.total } }).catch(()=>{});
-  }, [user, holdings.length, m?.total]);
+  const [earliestDate, setEarliestDate] = useState<string|null>(null);
 
   useEffect(() => {
     let alive = true;
-    if (!user) { setLoading(false); return; }
+    const withDates = holdings.filter((h:any) => h.buyDt);
+    if (!withDates.length) { setLoading(false); setChartData([]); return; }
     setLoading(true);
-    getSnapshots().then(async (snaps) => {
+
+    const earliest = withDates.reduce((min:string,h:any)=> h.buyDt < min ? h.buyDt : min, withDates[0].buyDt);
+    setEarliestDate(earliest);
+
+    Promise.all([
+      srvPriceHistory({ data: { symbol: "SPY", range: "max", interval: "1d" } }),
+      ...withDates.map((h:any) =>
+        srvPriceHistory({ data: { symbol: h.asset.ticker, range: "max", interval: "1d" } })
+          .then((series:any) => ({ ticker: h.asset.ticker, qty: h.qty, buyDt: h.buyDt, series: series || [] }))
+      ),
+    ]).then(([spy, ...perHolding]: any) => {
       if (!alive) return;
-      setSnapshots(snaps);
-      if (snaps.length >= 2) {
-        const rangeMap: Record<string,string> = {"1M":"1mo","3M":"3mo","6M":"6mo","YTD":"ytd","1Y":"1y","ALL":"max"};
-        const spy = await srvPriceHistory({ data: { symbol: "SPY", range: rangeMap[range], interval: "1d" } }).catch(()=>[]);
-        if (alive) setSpySeries(spy || []);
-      }
+
+      // Only trading days from the earliest purchase date onward
+      const earliestT = new Date(earliest).getTime();
+      const days = (spy || []).filter((p:any) => p.t >= earliestT).map((p:any) => p.t);
+
+      // Forward-fill pointer per holding for efficiency
+      const pointers = perHolding.map(() => 0);
+
+      const series = days.map((t:number) => {
+        let portfolioValue = 0;
+        perHolding.forEach((h:any, idx:number) => {
+          if (new Date(h.buyDt).getTime() > t) return; // not yet purchased on this day
+          while (pointers[idx] + 1 < h.series.length && h.series[pointers[idx]+1].t <= t) pointers[idx]++;
+          const price = h.series[pointers[idx]]?.close;
+          if (price != null) portfolioValue += price * h.qty;
+        });
+        return { t, portfolioValue };
+      }).filter((d:any) => d.portfolioValue > 0);
+
+      const base = series[0]?.portfolioValue;
+      const spyBase = spy?.find((p:any)=>p.t>=series[0]?.t)?.close;
+
+      const merged = series.map((s:any) => {
+        const spyPoint = spy.reduce((best:any,p:any)=> (p.t<=s.t ? p : best), null);
+        return {
+          label: new Date(s.t).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"2-digit"}),
+          t: s.t,
+          portfolio: base ? ((s.portfolioValue - base)/base)*100 : 0,
+          benchmark: (spyPoint && spyBase) ? ((spyPoint.close - spyBase)/spyBase)*100 : null,
+        };
+      });
+
+      setChartData(merged);
       setLoading(false);
     }).catch(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, [user, range]);
 
-  const chartData = useMemo(() => {
-    if (snapshots.length < 2) return [];
-    const cutoffDays: Record<string, number> = {"1M":30,"3M":90,"6M":180,"YTD":9999,"1Y":365,"ALL":100000};
-    const cutoff = cutoffDays[range];
+    return () => { alive = false; };
+  }, [holdings]);
+
+  const filtered = useMemo(() => {
+    if (!chartData.length) return [];
+    if (range === "ALL") return chartData;
+    const cutoffDays: Record<string, number> = {"1M":30,"3M":90,"6M":180,"1Y":365,"YTD":9999};
     const now = Date.now();
-    const filtered = snapshots.filter(s => {
-      if (range === "YTD") return new Date(s.snapshot_date).getFullYear() === new Date().getFullYear();
-      return (now - new Date(s.snapshot_date).getTime()) <= cutoff * 86400000;
-    });
-    if (filtered.length < 2) return [];
-    const base = filtered[0].total_value;
-    const spyBase = spySeries[0]?.close;
-    return filtered.map((s) => {
-      const t = new Date(s.snapshot_date).getTime();
-      const closestSpy = spySeries.reduce((best:any, p:any) => (Math.abs(p.t-t) < Math.abs((best?.t??Infinity)-t) ? p : best), null);
-      return {
-        label: new Date(s.snapshot_date).toLocaleDateString(undefined,{month:"short",day:"numeric"}),
-        portfolio: ((s.total_value - base) / base) * 100,
-        benchmark: (closestSpy && spyBase) ? ((closestSpy.close - spyBase) / spyBase) * 100 : null,
-      };
-    });
-  }, [snapshots, spySeries, range]);
+    if (range === "YTD") return chartData.filter((d:any) => new Date(d.t).getFullYear() === new Date().getFullYear());
+    return chartData.filter((d:any) => (now - d.t) <= cutoffDays[range]*86400000);
+  }, [chartData, range]);
 
   return (
     <div style={{ ...CARD, padding: "16px 18px" }}>
@@ -236,27 +253,23 @@ function PerformancePanel({ m, holdings }: any) {
         </div>
       </div>
 
-      {!user ? (
-        <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", background: B.panel2, borderRadius: 8 }}>
-          <div style={{ fontSize: 12, color: B.gray3, fontFamily: FONT, textAlign: "center", padding: "0 20px" }}>Sign in to start tracking your portfolio's performance over time.</div>
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", background: B.panel2, borderRadius: 8 }}>
           <div style={{ fontSize: 12, color: B.gray3, fontFamily: FONT }}>LOADING…</div>
         </div>
-      ) : chartData.length < 2 ? (
+      ) : filtered.length < 2 ? (
         <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", background: B.panel2, borderRadius: 8 }}>
           <div style={{ fontSize: 12, color: B.gray3, fontFamily: FONT, textAlign: "center", padding: "0 20px", lineHeight: 1.6 }}>
-            We just started tracking your portfolio's value{snapshots[0] ? ` (since ${new Date(snapshots[0].snapshot_date).toLocaleDateString()})` : ""}. Check back after a few more days to see this chart build up.
+            {holdings.length ? "Not enough historical price data for this range yet." : "Add positions with a purchase date to see this chart."}
           </div>
         </div>
       ) : (
         <div style={{ height: 180 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <XAxis dataKey="label" tick={{fontSize:10,fill:B.gray3}} minTickGap={30}/>
+            <LineChart data={filtered}>
+              <XAxis dataKey="label" tick={{fontSize:10,fill:B.gray3}} minTickGap={40}/>
               <YAxis tick={{fontSize:10,fill:B.gray3}} tickFormatter={(v)=>`${v.toFixed(0)}%`}/>
-              <Tooltip formatter={(v:any)=>`${v.toFixed(2)}%`} contentStyle={{fontFamily:FONT,fontSize:12}}/>
+              <Tooltip formatter={(v:any)=>v!=null?`${v.toFixed(2)}%`:"—"} contentStyle={{fontFamily:FONT,fontSize:12}}/>
               <ReferenceLine y={0} stroke={B.border}/>
               <Line type="monotone" dataKey="portfolio" stroke={B.blue} strokeWidth={2} dot={false} name="Your Portfolio"/>
               <Line type="monotone" dataKey="benchmark" stroke={B.gray3} strokeWidth={1.5} dot={false} name="S&P 500"/>
@@ -372,7 +385,7 @@ export default function HomePage({ holdings, setPage, onRefresh, refreshing }: a
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
         <PortfolioOverview holdings={holdings} m={m} onSave={handleSave} saving={saving} saveMsg={saveMsg} />
-        <PerformancePanel m={m} holdings={holdings}/>
+        <PerformancePanel holdings={holdings}/>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
