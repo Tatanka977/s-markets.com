@@ -178,57 +178,187 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
           </>
         )}
 
-        {sub === "risk" && (
-          <div>
-            <BPanel title="EXPOSURE ALERTS &amp; RISK CHECKS">
-              <div style={{ padding: "6px 12px", background: B.panel2, borderBottom: `1px solid ${B.border}`,
-                display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 11, color: B.gray3, fontFamily: FONT, letterSpacing: "0.06em" }}>
-                  {alerts.length} CHECK{alerts.length !== 1 ? "S" : ""} EVALUATED
-                </span>
-                <button onClick={explainAlerts} disabled={aiBusy || alerts[0]?.sev === "OK"} style={{
-                  background: "transparent", border: `1px solid ${B.cyan}`, color: B.cyan,
-                  padding: "4px 12px", cursor: alerts[0]?.sev === "OK" ? "not-allowed" : "pointer",
-                  fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: "0.08em",
-                  opacity: alerts[0]?.sev === "OK" ? 0.4 : 1,
-                }}>
-                  {aiBusy ? "ANALYZING…" : "✦ EXPLAIN ALL ALERTS"}
-                </button>
-              </div>
-              {aiExplain && (
-                <div style={{ padding: "10px 12px", background: B.panel2, borderBottom: `1px solid ${B.cyan}`, fontFamily: FONT }}>
-                  {aiExplain.split("\n").map((line, i) => {
-                    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+        {sub === "risk" && (() => {
+          const topH = topHoldings[0];
+          const topHPct = topH ? (topH.value/m.total)*100 : 0;
+          const topSectorPct = sD[0]?.pct ?? 0;
+          const topGeoPct = gD[0]?.pct ?? 0;
+          const nHoldings = holdings.length;
+          const maxDD = m.wVol * 2.5; // rough educational proxy, not real tracked drawdown
+
+          const riskScore = Math.round(Math.min(100,
+            topHPct * 0.9 +
+            Math.max(0, topSectorPct - 20) * 0.6 +
+            Math.max(0, (5 - nHoldings)) * 8 +
+            Math.max(0, m.wVol - 15) * 0.8
+          ));
+          const riskLabel = riskScore >= 70 ? "HIGH RISK" : riskScore >= 40 ? "MODERATE RISK" : "LOW RISK";
+          const riskColor = riskScore >= 70 ? B.red : riskScore >= 40 ? B.yellow : B.green;
+
+          const drivers = [
+            { l:"SINGLE NAME RISK", v:`${topHPct.toFixed(1)}%`, sub:topH?.asset.ticker||"—", sev: topHPct>40?"HIGH":topHPct>25?"MED":"OK" },
+            { l:"SECTOR RISK", v:`${topSectorPct}%`, sub:sD[0]?.name||"—", sev: topSectorPct>50?"HIGH":topSectorPct>35?"MED":"OK" },
+            { l:"DIVERSIFICATION RISK", v:`${nHoldings}`, sub:"Positions", sev: nHoldings<5?"HIGH":nHoldings<10?"MED":"OK" },
+            { l:"GEOGRAPHIC RISK", v:`${topGeoPct}%`, sub:gD[0]?.name||"—", sev: topGeoPct>80?"MED":"OK" },
+          ];
+
+          const alertRows = [
+            { l:"Single Name Exposure", cur:topHPct, target:20, isPct:true },
+            { l:`Sector Exposure (${sD[0]?.name||"—"})`, cur:topSectorPct, target:30, isPct:true },
+            { l:"Geographic Exposure", cur:topGeoPct, target:70, isPct:true, inverse:true },
+            { l:"Diversification (Positions)", cur:nHoldings, target:10, isPct:false, more:true },
+          ];
+
+          return (
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12}}>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+
+              {/* Risk Summary */}
+              <BPanel title="RISK SUMMARY">
+                <div style={{padding:"14px 16px",display:"flex",gap:20,flexWrap:"wrap",alignItems:"center"}}>
+                  <div style={{textAlign:"center",minWidth:100}}>
+                    <div style={{fontSize:32,fontWeight:700,color:riskColor,fontFamily:FONT}}>{riskScore}</div>
+                    <div style={{fontSize:10,color:B.gray3,fontFamily:FONT}}>/100</div>
+                    <div style={{fontSize:11,fontWeight:700,color:riskColor,fontFamily:FONT,marginTop:4}}>{riskLabel}</div>
+                  </div>
+                  <div style={{flex:1,minWidth:180,fontSize:12,color:B.gray1,fontFamily:FONT,lineHeight:1.5}}>
+                    Score based on concentration, sector exposure, diversification and volatility of your current holdings. This is our own educational scoring method, not an external credit or risk rating.
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px,1fr))",gap:10,padding:"0 16px 16px"}}>
+                  <div>
+                    <div style={{fontSize:9,color:B.gray3,fontFamily:FONT,textTransform:"uppercase"}}>Expected Volatility (Ann.)</div>
+                    <div style={{fontSize:16,fontWeight:700,color:B.gray1,fontFamily:FONT}}>{fmt(m.wVol,1)}%</div>
+                    <div style={{fontSize:10,color:B.gray3,fontFamily:FONT}}>Benchmark (S&amp;P 500, approx.): 15.6%</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,color:B.gray3,fontFamily:FONT,textTransform:"uppercase"}}>Max Drawdown (est.)</div>
+                    <div style={{fontSize:16,fontWeight:700,color:B.red,fontFamily:FONT}}>-{fmt(maxDD,1)}%</div>
+                    <div style={{fontSize:10,color:B.gray3,fontFamily:FONT}}>Estimate, not tracked history</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,color:B.gray3,fontFamily:FONT,textTransform:"uppercase"}}>Sharpe Ratio</div>
+                    <div style={{fontSize:16,fontWeight:700,color:m.sharpe>0?B.green:B.red,fontFamily:FONT}}>{fmt(m.sharpe,2)}</div>
+                    <div style={{fontSize:10,color:B.gray3,fontFamily:FONT}}>Benchmark (S&amp;P 500, approx.): 0.78</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,color:B.gray3,fontFamily:FONT,textTransform:"uppercase"}}>Beta (vs S&amp;P 500)</div>
+                    <div style={{fontSize:16,fontWeight:700,color:B.gray1,fontFamily:FONT}}>{fmt(m.wBeta,2)}</div>
+                    <div style={{fontSize:10,color:B.gray3,fontFamily:FONT}}>Benchmark: 1.00 (by definition)</div>
+                  </div>
+                </div>
+              </BPanel>
+
+              {/* Risk Drivers */}
+              <BPanel title="RISK DRIVERS">
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px,1fr))",gap:10,padding:12}}>
+                  {drivers.map((d,i)=>{
+                    const s = SEV_STYLE[d.sev];
                     return (
-                      <div key={i} style={{ fontSize: 12, color: B.gray1, lineHeight: 1.55, marginBottom: 2 }}>
-                        {parts.map((p, j) => p.startsWith("**") && p.endsWith("**") ? <span key={j} style={{ color: B.yellow, fontWeight: 700 }}>{p.slice(2,-2)}</span> : p)}
+                      <div key={i} style={{background:B.panel2,borderRadius:8,padding:"10px 12px",borderLeft:`3px solid ${s.border}`}}>
+                        <div style={{fontSize:9,color:B.gray3,fontFamily:FONT,textTransform:"uppercase",marginBottom:4}}>{d.l}</div>
+                        <div style={{fontSize:18,fontWeight:700,color:B.gray1,fontFamily:FONT}}>{d.v}</div>
+                        <div style={{fontSize:11,color:B.gray3,fontFamily:FONT,marginBottom:6}}>{d.sub}</div>
+                        <span style={{fontSize:9,fontWeight:700,color:s.text,border:`1px solid ${s.border}`,padding:"1px 6px",borderRadius:4}}>{d.sev}</span>
                       </div>
                     );
                   })}
                 </div>
-              )}
-              <div>
-                {alerts.map((a, i) => {
-                  const s = SEV_STYLE[a.sev];
-                  return (
-                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px",
-                      background: s.bg, borderLeft: `3px solid ${s.border}`, borderBottom: `1px solid ${B.border}`, fontFamily: FONT }}>
-                      <div style={{ fontSize: 20, color: s.text, lineHeight: 1, paddingTop: 2 }}>{s.icon}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: s.text }}>{a.title}</span>
-                          <span style={{ fontSize: 10, color: s.text, padding: "1px 5px", border: `1px solid ${s.border}` }}>{s.label}</span>
-                          <span style={{ fontSize: 11, color: B.gray3, marginLeft: "auto", fontWeight: 700 }}>{a.metric}</span>
+              </BPanel>
+
+              {/* Risk Concentration View */}
+              <BPanel title="RISK CONCENTRATION VIEW">
+                <div style={{display:"flex",gap:10,alignItems:"flex-start",padding:12,flexWrap:"wrap"}}>
+                  <table style={{flex:1,minWidth:200,borderCollapse:"collapse",fontFamily:FONT,fontSize:12}}>
+                    <thead>
+                      <tr style={{color:B.gray3,fontSize:10}}>
+                        <th style={{textAlign:"left",paddingBottom:6}}>HOLDING</th>
+                        <th style={{textAlign:"right",paddingBottom:6}}>WEIGHT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topHoldings.map((h:any)=>(
+                        <tr key={h.asset.ticker} style={{borderTop:`1px solid ${B.border}`}}>
+                          <td style={{padding:"5px 0",color:B.gray1}}>{h.asset.ticker}</td>
+                          <td style={{padding:"5px 0",textAlign:"right",color:B.gray1,fontWeight:700}}>{((h.value/m.total)*100).toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <ResponsiveContainer width={110} height={110}>
+                    <PieChart>
+                      <Pie data={topHoldings.map((h:any)=>({name:h.asset.ticker,value:h.value}))} cx="50%" cy="50%" innerRadius={30} outerRadius={48} paddingAngle={1} dataKey="value" strokeWidth={0}>
+                        {topHoldings.map((_:any,i:number)=><Cell key={i} fill={PIE_COLS[i%PIE_COLS.length]}/>)}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </BPanel>
+
+              {/* Risk Alerts table */}
+              <BPanel title="RISK ALERTS">
+                <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:12}}>
+                  <thead>
+                    <tr style={{color:B.gray3,fontSize:10}}>
+                      <th style={{textAlign:"left",padding:"6px 10px"}}>ALERT</th>
+                      <th style={{textAlign:"right",padding:"6px 10px"}}>CURRENT</th>
+                      <th style={{textAlign:"right",padding:"6px 10px"}}>TARGET</th>
+                      <th style={{textAlign:"center",padding:"6px 10px"}}>STATUS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {alertRows.map((r,i)=>{
+                      const breach = r.more ? r.cur < r.target : (r.inverse ? r.cur > r.target : r.cur > r.target);
+                      return (
+                        <tr key={i} style={{borderTop:`1px solid ${B.border}`}}>
+                          <td style={{padding:"6px 10px",color:B.gray1}}>{r.l}</td>
+                          <td style={{padding:"6px 10px",textAlign:"right",color:B.gray1,fontWeight:700}}>{r.isPct?`${r.cur.toFixed(1)}%`:r.cur}</td>
+                          <td style={{padding:"6px 10px",textAlign:"right",color:B.gray3}}>{r.more?`> ${r.target}`:r.isPct?`< ${r.target}%`:r.target}</td>
+                          <td style={{padding:"6px 10px",textAlign:"center"}}>
+                            <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,
+                              background: breach?"rgba(255,51,51,0.1)":"rgba(0,255,102,0.1)",
+                              color: breach?B.red:B.green}}>
+                              {breach ? "BREACH" : "WITHIN TARGET"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </BPanel>
+            </div>
+
+            {/* AI Risk Explanation */}
+            <BPanel title="AI RISK EXPLANATION">
+              <div style={{padding:12}}>
+                <button onClick={explainAlerts} disabled={aiBusy} style={{
+                  width:"100%",background:"transparent",border:`1px solid ${B.cyan}`,color:B.cyan,
+                  padding:"8px",cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:700,letterSpacing:"0.06em",borderRadius:6,marginBottom:10,
+                }}>
+                  {aiBusy ? "ANALYZING…" : aiExplain ? "↻ REFRESH EXPLANATION" : "✦ EXPLAIN MY RISK"}
+                </button>
+                {aiExplain ? (
+                  <div style={{fontSize:12,color:B.gray1,lineHeight:1.6,fontFamily:FONT}}>
+                    {aiExplain.split("\n").map((line, i) => {
+                      const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                      return (
+                        <div key={i} style={{marginBottom:6}}>
+                          {parts.map((p, j) => p.startsWith("**") && p.endsWith("**") ? <b key={j} style={{color:B.blue}}>{p.slice(2,-2)}</b> : p)}
                         </div>
-                        <div style={{ fontSize: 12, color: B.gray1, lineHeight: 1.5 }}>{a.detail}</div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{fontSize:12,color:B.gray3,fontFamily:FONT,lineHeight:1.6}}>
+                    Tap the button above for an AI-generated, plain-English breakdown of these risk drivers — educational only, not personalized advice.
+                  </div>
+                )}
               </div>
             </BPanel>
           </div>
-        )}
+          );
+        })()}
 
         {sub === "perf" && (
           <div style={{ padding: "10px", fontSize: 12, color: B.gray3, fontFamily: FONT, textAlign: "center" }}>
