@@ -149,3 +149,26 @@ export async function skipOnboarding(): Promise<void> {
   if (!user) return;
   await supabase.from("investor_profiles").upsert({ user_id: user.id, onboarding_skipped: true });
 }
+export async function upsertSnapshot({ data }: { data: { date: string; value: number } }): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData?.user;
+  if (!user) return;
+  await supabase.from("portfolio_snapshots").upsert({
+    user_id: user.id,
+    snapshot_date: data.date,
+    total_value: data.value,
+  });
+}
+
+export async function getSnapshots(): Promise<{ snapshot_date: string; total_value: number }[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData?.user;
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("portfolio_snapshots")
+    .select("snapshot_date, total_value")
+    .eq("user_id", user.id)
+    .order("snapshot_date", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
