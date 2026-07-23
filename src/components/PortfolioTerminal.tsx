@@ -1410,7 +1410,7 @@ function AIAdvisorPage({holdings}:any) {
       setPendingPrompt("");
       send(toSend);
     }
-  }, []);
+  }, [pendingPrompt]);
   const [input,setInput]=useState("");
   const [loading,setLoading]=useState(false);
   const [showQ,setShowQ]=useState(true);
