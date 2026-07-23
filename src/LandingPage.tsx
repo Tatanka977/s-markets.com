@@ -4,6 +4,12 @@ export default function LandingPage() {
   return (
     <div className="landing">
 
+      {/* AMBIENT BACKGROUND */}
+      <div className="glow glow-blue" />
+      <div className="glow glow-purple" />
+      <div className="glow glow-green" />
+      <div className="grid-overlay" />
+
       {/* NAVBAR */}
       <header className="header">
         <div className="container nav">
@@ -91,8 +97,15 @@ export default function LandingPage() {
 
             <div className="terminal">
 
+              <div className="terminal-dots">
+                <span />
+                <span />
+                <span />
+              </div>
+
               <div className="terminal-header">
                 Portfolio Terminal
+                <span className="live-dot" />
               </div>
 
               <div className="chart">
