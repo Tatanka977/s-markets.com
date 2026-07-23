@@ -175,18 +175,18 @@ function PerformancePanel({ holdings }: any) {
 
   useEffect(() => {
     let alive = true;
-    const withDates = holdings.filter((h:any) => h.buyDt);
+    const withDates = holdings.filter((h:any) => h.buyDate);
     if (!withDates.length) { setLoading(false); setChartData([]); return; }
     setLoading(true);
 
-    const earliest = withDates.reduce((min:string,h:any)=> h.buyDt < min ? h.buyDt : min, withDates[0].buyDt);
+    const earliest = withDates.reduce((min:string,h:any)=> h.buyDate < min ? h.buyDate : min, withDates[0].buyDate);
     setEarliestDate(earliest);
 
     Promise.all([
       srvPriceHistory({ data: { symbol: "SPY", range: "max", interval: "1d" } }),
       ...withDates.map((h:any) =>
         srvPriceHistory({ data: { symbol: h.asset.ticker, range: "max", interval: "1d" } })
-          .then((series:any) => ({ ticker: h.asset.ticker, qty: h.qty, buyDt: h.buyDt, series: series || [] }))
+          .then((series:any) => ({ ticker: h.asset.ticker, qty: h.qty, buyDt: h.buyDate, series: series || [] }))
       ),
     ]).then(([spy, ...perHolding]: any) => {
       if (!alive) return;
@@ -282,7 +282,7 @@ function PerformancePanel({ holdings }: any) {
 }
 function RecentActivity({ holdings }: any) {
   const rows = [...holdings]
-    .filter((h: any) => h.buyDt)
+    .filter((h: any) => h.buyDate)
     .sort((a: any, b: any) => new Date(b.buyDt).getTime() - new Date(a.buyDt).getTime())
     .slice(0, 5);
 
@@ -314,7 +314,7 @@ function RecentActivity({ holdings }: any) {
                   −${fmtM((h.costPrice || 0) * h.qty)}
                 </td>
                 <td style={{ padding: "8px 0", fontSize: 12, color: B.gray3, textAlign: "right" }}>
-                  {new Date(h.buyDt).toLocaleDateString()}
+                  {new Date(h.buyDate).toLocaleDateString()}
                 </td>
               </tr>
             ))}
