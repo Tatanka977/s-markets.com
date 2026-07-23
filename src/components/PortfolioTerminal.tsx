@@ -298,6 +298,48 @@ function FKeyBar({page,setPage}:any) {
   );
 }
 
+const NAV_ICONS: Record<string, JSX.Element> = {
+  home: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9.5 12 3l9 6.5" />
+      <path d="M5 9.5V21h14V9.5" />
+      <path d="M9 21v-6h6v6" />
+    </svg>
+  ),
+  search: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  ),
+  portfolio: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
+  ),
+  analysis: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" />
+      <path d="m19 9-5 5-4-4-4 4" />
+    </svg>
+  ),
+  ai: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+      <path d="M12 8a4 4 0 0 1 4 4 4 4 0 0 1-4 4 4 4 0 0 1-4-4 4 4 0 0 1 4-4Z" />
+    </svg>
+  ),
+  news: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="7" y1="9" x2="17" y2="9" />
+      <line x1="7" y1="13" x2="17" y2="13" />
+      <line x1="7" y1="17" x2="13" y2="17" />
+    </svg>
+  ),
+};
+
 function BottomNav({page,setPage,badge}:any) {
   const tabs=[
     {id:"home",     label:"HOME"},
@@ -315,13 +357,16 @@ function BottomNav({page,setPage,badge}:any) {
         return (
           <button key={t.id} onClick={()=>setPage(t.id)} style={{
             flex:1,background:"none",border:"none",cursor:"pointer",
-            padding:"8px 4px 6px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-            borderTop:`2px solid ${active?B.blue:"transparent"}`,position:"relative",minWidth:0}}>
+            padding:"10px 4px",display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"center",gap:6,
+            borderTop:`2px solid ${active?B.blue:"transparent"}`,position:"relative",minWidth:0,
+            color:active?B.blue:B.gray2,
+          }}>
             {t.badge>0&&<div style={{position:"absolute",top:2,right:"20%",
               background:B.blue,color:B.white,fontSize:10,fontWeight:700,
               fontFamily:"'Courier New',monospace",padding:"0 4px",lineHeight:"14px",borderRadius:2}}>{t.badge}</div>}
-            <span style={{fontSize:11,color:active?B.blue:B.gray2,fontWeight:700,
-              fontFamily:"'Courier New',monospace",letterSpacing:"0.06em",whiteSpace:"nowrap"}}>{t.label}</span>
+            {NAV_ICONS[t.id]}
+            <span style={{fontSize:12,fontWeight:700,
+              fontFamily:"'Courier New',monospace",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>{t.label}</span>
           </button>
         );
       })}
