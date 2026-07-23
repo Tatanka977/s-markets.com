@@ -2118,7 +2118,7 @@ export default function PortfolioTerminal() {
             {page==="home"       && <HomePage     holdings={holdings} setPage={setPage} onRefresh={refreshPrices} refreshing={refreshing}/>}
             {page==="search"     && <SearchPage   onAdd={addToPortfolio} portfolio={holdings}/>}
             {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio} onUpdate={updateHolding} onLoadPortfolio={setHoldings}/>}
-            {page==="analysis"   && <AnalysisPage  holdings={holdings}/>}
+            {page==="analysis"   && <AnalysisPage  holdings={holdings} setPage={setPage}/>}
             {page==="ai"         && <AIAdvisorPage holdings={holdings}/>}
             {page==="news"       && <NewsPage holdings={holdings} setPage={setPage}/>}
           </div>
