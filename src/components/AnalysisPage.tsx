@@ -16,13 +16,10 @@ const BENCHMARKS = [
   { sym: "ACWI", label: "MSCI ACWI" },
 ];
 
-function KpiCard({ icon, label, value, sub, subColor }: any) {
+function KpiCard({ label, value, sub, subColor }: any) {
   return (
     <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 12, padding: "14px 16px", flex: 1, minWidth: 150 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-        <span style={{ fontSize: 15 }}>{icon}</span>
-        <span style={{ fontSize: 10, color: B.gray3, letterSpacing: "0.08em", fontFamily: FONT, textTransform: "uppercase" }}>{label}</span>
-      </div>
+      <div style={{ fontSize: 10, color: B.gray3, letterSpacing: "0.08em", fontFamily: FONT, textTransform: "uppercase", marginBottom: 8 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, color: B.gray1, fontFamily: FONT }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: subColor || B.gray3, fontFamily: FONT, marginTop: 2 }}>{sub}</div>}
     </div>
@@ -370,7 +367,7 @@ function PerformanceTab({ holdings, m }: any) {
           <button onClick={explainPerformance} disabled={aiBusy} style={{
             background:"transparent", border:`1px solid ${B.cyan}`, color:B.cyan, padding:"7px 14px",
             borderRadius:6, cursor:"pointer", fontFamily:FONT, fontSize:12, fontWeight:700, marginBottom:10,
-          }}>{aiBusy?"ANALYZING…":aiText?"↻ REFRESH":"✦ EXPLAIN IN DETAIL"}</button>
+          }}>{aiBusy?"ANALYZING…":aiText?"↻ REFRESH":"EXPLAIN IN DETAIL"}</button>
           {aiText ? (
             <div style={{fontSize:12,color:B.gray1,lineHeight:1.6,fontFamily:FONT}}>
               {aiText.split("\n").map((line,i)=>{
@@ -772,12 +769,12 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
         {sub === "alloc" && (
           <>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
-              <KpiCard icon="🥧" label="Total Portfolio Value" value={`$${fmtM(m.total)}`} sub="Market value" />
-              <KpiCard icon="📊" label="Total Holdings" value={holdings.length} sub="Securities" />
-              <KpiCard icon="🎯" label="Largest Sector" value={sD[0]?.name || "N/A"} sub={sD[0] ? `${sD[0].pct}%` : ""} subColor={B.blue} />
-              <KpiCard icon="🌐" label="Main Geography" value={gD[0]?.name || "N/A"} sub={gD[0] ? `${gD[0].pct}%` : ""} subColor={B.blue} />
-              <KpiCard icon="🥧" label="Main Asset Class" value={tD[0]?.name || "N/A"} sub={tD[0] ? `${tD[0].pct}%` : ""} subColor={B.blue} />
-              <KpiCard icon="📈" label="Day Change" value={`${pSign(fmt(m.wDay,2))}%`} sub="Since prev. close" subColor={pCol(m.wDay)} />
+              <KpiCard label="Total Portfolio Value" value={`$${fmtM(m.total)}`} sub="Market value" />
+              <KpiCard label="Total Holdings" value={holdings.length} sub="Securities" />
+              <KpiCard label="Largest Sector" value={sD[0]?.name || "N/A"} sub={sD[0] ? `${sD[0].pct}%` : ""} subColor={B.blue} />
+              <KpiCard label="Main Geography" value={gD[0]?.name || "N/A"} sub={gD[0] ? `${gD[0].pct}%` : ""} subColor={B.blue} />
+              <KpiCard label="Main Asset Class" value={tD[0]?.name || "N/A"} sub={tD[0] ? `${tD[0].pct}%` : ""} subColor={B.blue} />
+              <KpiCard label="Day Change" value={`${pSign(fmt(m.wDay,2))}%`} sub="Since prev. close" subColor={pCol(m.wDay)} />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10, marginBottom: 10 }}>
@@ -883,7 +880,7 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
                         fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em",
                         gridColumn: "1 / -1",
                       }}>
-                        ✦ AI ADVANCED ANALYSIS →
+                        AI ADVANCED ANALYSIS →
                       </button>
                     </div>
                   )}
@@ -896,7 +893,13 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
         {sub === "risk" && (() => {
           const topH = topHoldings[0];
           const topHPct = topH ? (topH.value/m.total)*100 : 0;
-          const topSectorPct = sD[0]?.pct ?? 0;
+          // Sector concentration only applies to single-sector exposures (stocks/REITs) —
+          // ETFs/bonds/commodities/crypto/FX are diversified-by-construction or not a
+          // "sector" concept, so they're excluded here (kept in the alloc tab's `sD`,
+          // which is a display breakdown, not a risk judgment).
+          const sectorRiskHoldings = holdings.filter((h:any) => !h.asset.category || ["STOCK","REIT"].includes(h.asset.category));
+          const sDRisk = groupBy(sectorRiskHoldings, "sector", m.total);
+          const topSectorPct = sDRisk[0]?.pct ?? 0;
           const topGeoPct = gD[0]?.pct ?? 0;
           const nHoldings = holdings.length;
           const maxDD = m.wVol * 2.5; // rough educational proxy, not real tracked drawdown
@@ -912,14 +915,14 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
 
           const drivers = [
             { l:"SINGLE NAME RISK", v:`${topHPct.toFixed(1)}%`, sub:topH?.asset.ticker||"—", sev: topHPct>40?"HIGH":topHPct>25?"MED":"OK" },
-            { l:"SECTOR RISK", v:`${topSectorPct}%`, sub:sD[0]?.name||"—", sev: topSectorPct>50?"HIGH":topSectorPct>35?"MED":"OK" },
+            { l:"SECTOR RISK", v:`${topSectorPct}%`, sub:sDRisk[0]?.name||"—", sev: topSectorPct>50?"HIGH":topSectorPct>35?"MED":"OK" },
             { l:"DIVERSIFICATION RISK", v:`${nHoldings}`, sub:"Positions", sev: nHoldings<5?"HIGH":nHoldings<10?"MED":"OK" },
             { l:"GEOGRAPHIC RISK", v:`${topGeoPct}%`, sub:gD[0]?.name||"—", sev: topGeoPct>80?"MED":"OK" },
           ];
 
           const alertRows = [
             { l:"Single Name Exposure", cur:topHPct, target:20, isPct:true },
-            { l:`Sector Exposure (${sD[0]?.name||"—"})`, cur:topSectorPct, target:30, isPct:true },
+            { l:`Sector Exposure (${sDRisk[0]?.name||"—"})`, cur:topSectorPct, target:30, isPct:true },
             { l:"Geographic Exposure", cur:topGeoPct, target:70, isPct:true, inverse:true },
             { l:"Diversification (Positions)", cur:nHoldings, target:10, isPct:false, more:true },
           ];
@@ -1051,7 +1054,7 @@ Max 250 words. Respond in ENGLISH.${profileText}`;
                   width:"100%",background:"transparent",border:`1px solid ${B.cyan}`,color:B.cyan,
                   padding:"8px",cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:700,letterSpacing:"0.06em",borderRadius:6,marginBottom:10,
                 }}>
-                  {aiBusy ? "ANALYZING…" : aiExplain ? "↻ REFRESH EXPLANATION" : "✦ EXPLAIN MY RISK"}
+                  {aiBusy ? "ANALYZING…" : aiExplain ? "↻ REFRESH EXPLANATION" : "EXPLAIN MY RISK"}
                 </button>
                 {aiExplain ? (
                   <div style={{fontSize:12,color:B.gray1,lineHeight:1.6,fontFamily:FONT}}>

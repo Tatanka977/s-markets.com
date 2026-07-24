@@ -545,6 +545,11 @@ useEffect(()=>{
     setHistInfo({kind:null, text:""});
     try {
       const d = await fetchQuote(r.symbol);
+      // Prefer the search result's category: it comes from real exchange/type
+      // classification (Yahoo quoteType/OpenFIGI securityType), whereas the quote's
+      // own category defaults to "STOCK" whenever Finnhub/mock data doesn't know
+      // better — that mislabels ETFs, which then pollutes sector-concentration math.
+      d.category= r.category|| d.category;
       d.sector  = d.sector  || r.sector  || d.industry || r.industry || "N/A";
       d.industry= d.industry|| r.industry|| "N/A";
       d.type    = d.type    || r.type    || "EQUITY";
@@ -705,12 +710,12 @@ useEffect(()=>{
           <button onClick={addWatch} disabled={watchBusy} style={{
             background:"none",border:`1px solid ${B.border}`,color:B.blue,padding:"8px 16px",borderRadius:8,
             cursor:watchBusy?"wait":"pointer",fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700}}>
-            {watchBusy ? "..." : watchMsg || "☆ ADD TO WATCHLIST"}
+            {watchBusy ? "..." : watchMsg || "ADD TO WATCHLIST"}
           </button>
           <button onClick={()=>setShowAlertForm(v=>!v)} style={{
             background:showAlertForm?B.panel2:"none",border:`1px solid ${B.border}`,color:B.yellow,padding:"8px 16px",borderRadius:8,
             cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700}}>
-            🔔 PRICE ALERT
+            PRICE ALERT
           </button>
         </div>
       </div>
@@ -1725,7 +1730,7 @@ function AIAdvisorPage({holdings}:any) {
             background:"none",border:`1px solid ${B.green}`,color:B.green,
             fontFamily:"'Courier New',monospace",fontSize:14,fontWeight:700,
             padding:"2px 6px",cursor:msgs.length?"pointer":"not-allowed",opacity:msgs.length?1:0.4}}>
-            💾 SAVE
+            SAVE
           </button>
           <div style={{width:6,height:6,background:B.green,animation:"blink 2s infinite"}}/>
           <span style={{fontSize:14,color:B.green,fontFamily:"'Courier New',monospace"}}>ONLINE</span>
@@ -2010,7 +2015,6 @@ Max 180 words. Respond in ENGLISH.`;
       <div style={{padding:"4px 6px",borderBottom:`1px solid ${B.border}`,background:B.panel2,
         display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:4,flex:"1 1 220px",minWidth:160}}>
-          <span style={{color:B.cyan,fontSize:13,fontFamily:"'Courier New',monospace",fontWeight:700}}>🔍</span>
           <input
             data-testid="news-keyword-input"
             value={keyword}
@@ -2126,7 +2130,7 @@ Max 180 words. Respond in ENGLISH.`;
             fontFamily:"'Courier New',monospace", fontSize:14, fontWeight:700, letterSpacing:"0.06em",
             opacity: list.length ? 1 : 0.4,
           }}>
-            {sentBusy ? "ANALYZING..." : "✦ AI SENTIMENT"}
+            {sentBusy ? "ANALYZING..." : "AI SENTIMENT"}
           </button>
         </div>
       </div>
@@ -2135,7 +2139,7 @@ Max 180 words. Respond in ENGLISH.`;
         {sentiment && (
           <div style={{padding:"8px 10px",borderBottom:`1px solid ${B.cyan}`,background:B.panel2}}>
             <div style={{fontSize:14,color:B.cyan,fontFamily:"'Courier New',monospace",fontWeight:700,marginBottom:4,letterSpacing:"0.08em"}}>
-              ✦ STRATEGIC MARKETS AI SENTIMENT
+              STRATEGIC MARKETS AI SENTIMENT
             </div>
             {sentiment.split("\n").map((line, i) => {
               const parts = line.split(/(\*\*[^*]+\*\*)/g);

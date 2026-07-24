@@ -132,7 +132,7 @@ function ProfilePage() {
                   <div style={{ fontSize: 12, color: B.yellow, fontWeight: 700 }}>{it.name || it.symbol || it.title}</div>
                   <div style={{ fontSize: 10, color: B.gray2 }}>
                     {tab === "portfolios" && `${(it.holdings || []).length} positions · ${new Date(it.updated_at).toLocaleDateString()}`}
-                    {tab === "watchlist" && `${it.category || ""} · ${new Date(it.created_at).toLocaleDateString()}${it.target_price != null ? ` · 🔔 ${it.direction} ${it.target_price}` : ""}`}
+                    {tab === "watchlist" && `${it.category || ""} · ${new Date(it.created_at).toLocaleDateString()}${it.target_price != null ? ` · ALERT ${it.direction} ${it.target_price}` : ""}`}
                     {tab === "ai" && `${(it.messages || []).length} messages · ${new Date(it.updated_at).toLocaleDateString()}`}
                   </div>
                 </div>
@@ -160,7 +160,7 @@ function ProfilePage() {
                       await fAlertW({ data: { id: it.id, target_price: price, direction } });
                       loadAll();
                     }} style={{ background: "transparent", border: `1px solid ${B.border}`, color: B.yellow,
-                      padding: "2px 8px", cursor: "pointer", fontSize: 10, fontFamily: FONT }}>🔔</button>
+                      padding: "2px 8px", cursor: "pointer", fontSize: 10, fontFamily: FONT }}>ALERT</button>
                   )}
                   {tab === "ai" && (
                     <button onClick={() => loadConversation(it)} style={{ background: "transparent", border: `1px solid ${B.border}`, color: B.blue,

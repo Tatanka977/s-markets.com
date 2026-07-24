@@ -68,12 +68,11 @@ export const FKey = ({num,label,active,onClick}) => (
 );
 
 export const BPanel = ({title,children,style,accent}:any) => (
-  <div style={{border:`1px solid ${accent?B.blue:B.border}`,background:B.panel,...style}}>
+  <div style={{border:`1px solid ${accent?B.blue:B.border}`,background:B.panel,borderRadius:12,...style}}>
     {title&&(
-      <div style={{background:accent?B.blue:B.blue,padding:"3px 8px",
-        display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontSize:13,fontWeight:700,color:B.white,
-          fontFamily:"'Courier New',monospace",letterSpacing:"0.08em",textTransform:"uppercase"}}>{title}</span>
+      <div style={{padding:"14px 16px 0"}}>
+        <span style={{fontSize:13,fontWeight:700,color:B.blue,
+          fontFamily:"'Courier New',monospace",letterSpacing:"0.06em",textTransform:"uppercase"}}>{title}</span>
       </div>
     )}
     {children}
@@ -92,9 +91,14 @@ export function computeAlerts(holdings:any[], m:any) {
   else if (maxWeight > 25) alerts.push({sev:"MED", title:"SINGLE-NAME EXPOSURE", metric:`${maxWeight.toFixed(1)}%`,
     detail:`${topPos?.asset.ticker} represents >25% of portfolio. Moderate concentration risk.`});
 
-  // 2. Sector concentration
+  // 2. Sector concentration — only meaningful for single-sector exposures
+  // (individual stocks/REITs). ETFs, bonds, commodities, crypto, FX and cash
+  // are diversified-by-construction or not a "sector" concept at all, so
+  // grouping them under one generic label and flagging that as concentration
+  // risk is a false positive (a broad-market ETF at 60% isn't sector risk).
   const sectorMap = new Map<string,number>();
   holdings.forEach((h:any) => {
+    if (h.asset.category && !["STOCK","REIT"].includes(h.asset.category)) return;
     const s = h.asset.sector || h.asset.industry || "OTHER";
     sectorMap.set(s, (sectorMap.get(s)||0) + h.value);
   });

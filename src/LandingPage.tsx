@@ -1,23 +1,24 @@
 import "./LandingPage.css";
-import { LogoWithText, LogoIcon } from "@/components/Logo";
+import { LogoWithText } from "@/components/Logo";
 import { useTheme } from "@/hooks/useTheme";
+
+const MOCK_HOLDINGS = [
+  { ticker: "AAPL", name: "Apple Inc.", price: "195.42", delta: "+1.20%", up: true },
+  { ticker: "MSFT", name: "Microsoft Corp.", price: "421.55", delta: "+0.80%", up: true },
+  { ticker: "BTC-USD", name: "Bitcoin", price: "98,450", delta: "+2.34%", up: true },
+  { ticker: "TLT", name: "20Y Treasury ETF", price: "92.15", delta: "-0.42%", up: false },
+];
 
 export default function LandingPage() {
   const [theme, , toggleTheme] = useTheme();
   const isAurora = theme === "aurora";
+
   return (
     <div className="landing">
-
-      {/* AMBIENT BACKGROUND */}
-      <div className="glow glow-blue" />
-      <div className="glow glow-purple" />
-      <div className="glow glow-green" />
-      <div className="grid-overlay" />
 
       {/* NAVBAR */}
       <header className="header">
         <div className="container nav">
-
           <div className="logo">
             <LogoWithText />
           </div>
@@ -31,13 +32,14 @@ export default function LandingPage() {
               title={isAurora ? "Switch to dark mode" : "Switch to light mode"}
               aria-label="Toggle light/dark mode"
               style={{
-                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
-                borderRadius: "50%", width: 34, height: 34, cursor: "pointer", padding: 0,
+                background: "transparent", border: "1px solid var(--sm-border)",
+                borderRadius: "50%", width: 32, height: 32, cursor: "pointer", padding: 0,
                 display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                color: "var(--sm-gray1)",
               }}
             >
               {isAurora ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"#0f172a"}}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="4" />
                   <line x1="12" y1="2" x2="12" y2="4" />
                   <line x1="12" y1="20" x2="12" y2="22" />
@@ -49,7 +51,7 @@ export default function LandingPage() {
                   <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
                 </svg>
               ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"#f1f5f9"}}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
                 </svg>
               )}
@@ -58,282 +60,137 @@ export default function LandingPage() {
               Open Terminal <span className="btn-arrow">→</span>
             </a>
           </div>
-
         </div>
       </header>
-
 
       {/* HERO */}
       <section className="hero" id="home">
         <div className="container hero-grid">
 
-          <div className="hero-content">
-
-            <span className="badge">AI-POWERED INVESTING PLATFORM</span>
+          <div>
+            <span className="eyebrow">Portfolio Analytics Terminal</span>
 
             <h1>
-              Smarter investing.
+              Track markets. Test strategy.
               <br />
-              <span className="accent">Powered</span> by AI.
+              <span className="accent">Learn what drives risk.</span>
             </h1>
 
             <p>
-              Strategic Markets gives investors a powerful portfolio
-              terminal with multi-asset coverage, analytics and AI
-              investment insights.
+              Strategic Markets is an educational portfolio terminal — live quotes
+              across stocks, ETFs, bonds, crypto and FX, real risk analytics, and an
+              AI assistant for scenario analysis. Built to help you understand
+              markets, not to give financial advice.
             </p>
 
             <div className="hero-buttons">
-
               <a href="/terminal" className="btn btn-primary">
-                Launch Platform <span className="btn-arrow">→</span>
+                Open Terminal <span className="btn-arrow">→</span>
               </a>
-
-              <a href="#features"
+              <a
+                href="#features"
                 className="btn btn-secondary"
                 onClick={(e) => {
                   e.preventDefault();
                   document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
                 }}
               >
-                Learn More
+                Learn more
               </a>
-
             </div>
 
             <div className="stats">
-
-              <div className="stat">
-                <div className="stat-icon stat-icon-blue">🌐</div>
-                <div>
-                  <h2>7+</h2>
-                  <span>Asset classes covered</span>
-                </div>
+              <div>
+                <div className="stat-label">Asset classes</div>
+                <div className="stat-value">7+</div>
               </div>
-
-              <div className="stat">
-                <div className="stat-icon stat-icon-blue">🎁</div>
-                <div>
-                  <h2>Free</h2>
-                  <span>To get started</span>
-                </div>
+              <div>
+                <div className="stat-label">Market data</div>
+                <div className="stat-value">Real-time</div>
               </div>
-
-              <div className="stat">
-                <div className="stat-icon stat-icon-purple">✨</div>
-                <div>
-                  <h2>AI</h2>
-                  <span>Portfolio insights</span>
-                </div>
+              <div>
+                <div className="stat-label">Analysis</div>
+                <div className="stat-value">AI-assisted</div>
               </div>
-
             </div>
-
           </div>
 
-          <div className="hero-card">
-
-            <div className="terminal">
-
-              <div className="terminal-dots">
-                <span />
-                <span />
-                <span />
-              </div>
-
-              <div className="terminal-header">
-                Portfolio Terminal
-                <span className="live-dot" />
-              </div>
-
-              <div className="chart">
-  <svg
-    viewBox="0 0 500 180"
-    className="performance-chart"
-  >
-
-    <defs>
-      <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0%" stopColor="#22c55e" stopOpacity="0.35" />
-        <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
-      </linearGradient>
-    </defs>
-
-
-    {/* area sotto la linea */}
-    <path
-      d="
-      M0 140
-      C40 120, 70 130, 100 110
-      C140 80, 170 100, 210 75
-      C250 55, 280 90, 320 50
-      C370 20, 420 45, 500 15
-      L500 180
-      L0 180
-      Z"
-      fill="url(#area)"
-    />
-
-
-    {/* linea crescita */}
-    <path
-      d="
-      M0 140
-      C40 120, 70 130, 100 110
-      C140 80, 170 100, 210 75
-      C250 55, 280 90, 320 50
-      C370 20, 420 45, 500 15"
-      fill="none"
-      stroke="#22c55e"
-      strokeWidth="4"
-      strokeLinecap="round"
-    />
-
-
-    {/* punti */}
-    <circle cx="100" cy="110" r="5" fill="#22c55e"/>
-    <circle cx="210" cy="75" r="5" fill="#22c55e"/>
-    <circle cx="320" cy="50" r="5" fill="#22c55e"/>
-    <circle cx="500" cy="15" r="5" fill="#22c55e"/>
-
-  </svg>
-</div>
-
-              <div className="portfolio">
-
-                <div>
-                  <span>Global Equity</span>
-                  <strong>+12.4%</strong>
-                </div>
-
-                <div>
-                  <span>AI Strategy</span>
-                  <strong>+18.9%</strong>
-                </div>
-
-                <div>
-                  <span>Crypto Index</span>
-                  <strong>+7.2%</strong>
-                </div>
-
-              </div>
-
+          <div className="mock-terminal">
+            <div className="mock-topbar">
+              <span>Strategic Markets — Portfolio</span>
+              <span className="mock-live">
+                <span className="mock-live-dot" /> LIVE
+              </span>
             </div>
-
+            {MOCK_HOLDINGS.map((h) => (
+              <div className="mock-row" key={h.ticker}>
+                <div>
+                  <span className="mock-ticker">{h.ticker}</span>
+                  <span className="mock-name">{h.name}</span>
+                </div>
+                <span className="mock-price">{h.price}</span>
+                <span className={`mock-delta ${h.up ? "mock-up" : "mock-down"}`}>{h.delta}</span>
+              </div>
+            ))}
+            <div className="mock-footer">
+              <span>Educational simulation</span>
+              <span>Not investment advice</span>
+            </div>
           </div>
-
 
         </div>
       </section>
-
-
 
       {/* FEATURES */}
       <section className="features" id="features">
-
         <div className="container">
-
           <div className="section-title">
-
-            <span className="eyebrow">EVERYTHING INVESTORS NEED</span>
-
-            <h2>
-              Powerful tools designed for modern portfolio management.
-            </h2>
-
+            <span className="eyebrow">What's inside</span>
+            <h2>Built for understanding a portfolio, not just watching it.</h2>
           </div>
-
 
           <div className="cards">
-
-
             <div className="card">
-
-              <div className="icon icon-orange">
-                ⚡
-              </div>
-
-              <h2>
-                AI Advisor
-              </h2>
-
+              <div className="card-label">Analytics</div>
+              <h2>Risk &amp; correlation, not just returns</h2>
               <p>
-                Get intelligent market analysis and portfolio suggestions.
+                Sharpe, Sortino, drawdown, sector/geo concentration and a
+                correlation matrix across holdings — see what's actually
+                driving your risk.
               </p>
-
             </div>
 
-
-
             <div className="card">
-
-              <div className="icon icon-blue">
-                📊
-              </div>
-
-              <h2>
-                Multi Asset Analytics
-              </h2>
-
+              <div className="card-label">Coverage</div>
+              <h2>Stocks, ETFs, bonds, crypto &amp; FX</h2>
               <p>
-                Track equities, crypto, commodities and alternative assets.
+                Search and track multi-asset positions with live quotes,
+                historical backtests, and multi-currency valuation.
               </p>
-
             </div>
 
-
-
             <div className="card">
-
-              <div className="icon icon-green">
-                🔒
-              </div>
-
-              <h2>
-                Secure Platform
-              </h2>
-
+              <div className="card-label">AI assistant</div>
+              <h2>Ask questions, get educational context</h2>
               <p>
-                Built on Supabase with row-level security, so your data stays yours.
+                A portfolio-aware assistant that explains what the numbers
+                mean — framed as education, never as personalized advice.
               </p>
-
             </div>
-
-
           </div>
-
         </div>
-
       </section>
-
-
 
       {/* CTA */}
-
       <section className="cta">
-
         <div className="container">
-
-          <h2>
-            Ready to analyze the markets?
-          </h2>
-
-
-          <p>
-            Access powerful analytics, AI insights and real-time data.
-          </p>
-
-
-          <a href="/terminal" className="btn btn-white">
+          <h2>Ready to explore your portfolio?</h2>
+          <p>Free to start — no brokerage connection required, just live market data and analytics.</p>
+          <a href="/terminal" className="btn btn-primary">
             Open Terminal <span className="btn-arrow">→</span>
           </a>
-
-
         </div>
-
       </section>
-
-
 
       <footer>
         <div className="container footer-grid">
@@ -350,7 +207,6 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
-
 
     </div>
   );

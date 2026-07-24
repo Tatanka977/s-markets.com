@@ -427,7 +427,7 @@ function DailySummaryCard({ holdings }: any) {
   return (
     <div style={{ ...CARD, padding: "16px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: B.blue, letterSpacing: "0.06em", fontFamily: FONT }}>✦ TODAY'S AI SUMMARY</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: B.blue, letterSpacing: "0.06em", fontFamily: FONT }}>TODAY'S AI SUMMARY</span>
         <button onClick={generate} disabled={busy} style={{
           background: "transparent", border: `1px solid ${B.cyan}`, color: B.cyan, padding: "4px 10px", borderRadius: 6,
           cursor: busy ? "wait" : "pointer", fontFamily: FONT, fontSize: 11, fontWeight: 700,
