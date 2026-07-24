@@ -341,8 +341,22 @@ export const fetchQuote = createServerFn({ method: "GET" })
           return q;
         }
       } catch (e) {
-        console.warn("[Finnhub quote] falling back to mock:", (e as Error).message);
+        console.warn("[Finnhub quote] falling back:", (e as Error).message);
       }
+    }
+    // Finnhub unavailable/failed/doesn't cover this exchange — try a real Yahoo
+    // quote before resorting to findMock()'s fictional ticker-derived price.
+    const yq = await fetchYahooQuoteFull(sym);
+    if (yq) {
+      if (mock) {
+        yq.category = mock.category;
+        yq.sector = yq.sector || mock.industry;
+        yq.industry = yq.industry || mock.industry;
+        yq.type = yq.type || mock.type;
+      }
+      const ySec = await fetchYahooSector(sym);
+      if (ySec) { yq.sector = ySec.sector; yq.industry = ySec.industry; }
+      return yq;
     }
     const m = findMock(sym);
     const ySec = await fetchYahooSector(sym);
@@ -376,6 +390,17 @@ export const batchRefresh = createServerFn({ method: "POST" })
         } catch {
           // ignore, fall back
         }
+      }
+      // Real Yahoo quote before the fictional ticker-derived mock price.
+      const yq = await fetchYahooQuoteFull(sym);
+      if (yq) {
+        if (mock) {
+          yq.category = mock.category;
+          yq.sector = yq.sector || mock.industry;
+          yq.type = yq.type || mock.type;
+        }
+        results.push(yq);
+        continue;
       }
       results.push(findMock(sym));
     }
@@ -486,6 +511,57 @@ async function fetchYahooQuote(symbol: string): Promise<{ price: number; currenc
     return { price: meta.regularMarketPrice, currency: meta.currency || "USD" };
   } catch (e) {
     console.warn("[Yahoo quote] error:", (e as Error).message);
+    return null;
+  }
+}
+
+interface YahooQuoteMetaResult {
+  chart?: {
+    result?: Array<{
+      meta: {
+        regularMarketPrice?: number;
+        previousClose?: number;
+        regularMarketPreviousClose?: number;
+        chartPreviousClose?: number;
+        currency?: string;
+        exchangeName?: string;
+        longName?: string;
+        shortName?: string;
+        instrumentType?: string;
+      };
+    }>;
+    error?: unknown;
+  };
+}
+
+// Real current-price fallback for tickers Finnhub doesn't cover (e.g. European
+// exchanges like Borsa Italiana `.MI`) or when Finnhub isn't configured at all.
+// Used instead of `findMock()`'s made-up price so an unmocked security shows a
+// real quote rather than a deterministic-but-fictional number derived from its
+// ticker's first letter — see fetchQuote/batchRefresh below.
+async function fetchYahooQuoteFull(symbol: string): Promise<Quote | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
+  try {
+    const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (StrategicMarkets)" } });
+    if (!r.ok) return null;
+    const j = (await r.json()) as YahooQuoteMetaResult;
+    const meta = j.chart?.result?.[0]?.meta;
+    if (!meta?.regularMarketPrice) return null;
+    const price = meta.regularMarketPrice;
+    const prev = meta.previousClose ?? meta.regularMarketPreviousClose ?? meta.chartPreviousClose ?? null;
+    const dayChangePct = prev != null && prev !== 0 ? ((price - prev) / prev) * 100 : null;
+    const sym = symbol.trim().toUpperCase();
+    return {
+      symbol: sym, ticker: sym,
+      shortName: meta.longName || meta.shortName || sym,
+      price, previousClose: prev, dayChangePct,
+      currency: meta.currency || "USD",
+      exchange: meta.exchangeName || "—",
+      marketCap: null, pe: null, dividendYield: null,
+      type: meta.instrumentType || "Equity",
+    };
+  } catch (e) {
+    console.warn("[Yahoo full quote] error:", symbol, (e as Error).message);
     return null;
   }
 }
