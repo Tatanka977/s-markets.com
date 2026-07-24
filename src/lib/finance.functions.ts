@@ -627,16 +627,24 @@ export const fetchHistoricalPrice = createServerFn({ method: "GET" })
       reason: "no historical data available for this symbol/date",
     };
   });
-export const fetchFxRates = createServerFn({ method: "GET" }).handler(async () => {
-  const [eurUsd, gbpUsd] = await Promise.all([
-    fetchYahooQuote("EURUSD=X"),
-    fetchYahooQuote("GBPUSD=X"),
-  ]);
-  return {
-    EURUSD: eurUsd?.price ?? null,
-    GBPUSD: gbpUsd?.price ?? null,
-    fetchedAt: Date.now(),
-  };
+// Generic FX rates: given a base currency and a list of other currencies,
+// returns a map of `rates[CCY]` = how many units of `base` one unit of CCY
+// is worth (so `valueInBase = valueInCCY * rates[CCY]`). `rates[base]` is
+// always 1. Backed by the same Yahoo quote endpoint as the old hardcoded
+// EUR/GBP-only version, just parameterized over an arbitrary currency list.
+export const fetchFxRates = createServerFn({ method: "GET" })
+  .inputValidator((d: { base?: string; currencies?: string[] } | undefined) => d ?? {})
+  .handler(async ({ data }) => {
+    const base = (data.base || "USD").toUpperCase();
+    const currencies = Array.from(new Set(
+      (data.currencies || []).map(c => (c || "").toUpperCase()).filter(c => c && c !== base)
+    ));
+    const rates: Record<string, number> = { [base]: 1 };
+    if (currencies.length) {
+      const quotes = await Promise.all(currencies.map(c => fetchYahooQuote(`${c}${base}=X`)));
+      currencies.forEach((c, i) => { if (quotes[i]?.price != null) rates[c] = quotes[i]!.price; });
+    }
+    return { base, rates, fetchedAt: Date.now() };
 });
 interface YahooChartSeriesResult {
   chart?: {

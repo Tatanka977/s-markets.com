@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useUser } from "@/hooks/useUser";
 import {
   listPortfolios, deletePortfolio,
-  listWatchlist, deleteWatchlist,
+  listWatchlist, deleteWatchlist, updateWatchlistAlert,
   listConversations, deleteConversation,
 } from "@/lib/profile.functions";
 
@@ -27,6 +27,7 @@ function ProfilePage() {
   const fDelP  = useServerFn(deletePortfolio);
   const fWatch = useServerFn(listWatchlist);
   const fDelW  = useServerFn(deleteWatchlist);
+  const fAlertW = useServerFn(updateWatchlistAlert);
   const fConv  = useServerFn(listConversations);
   const fDelC  = useServerFn(deleteConversation);
 
@@ -40,6 +41,18 @@ function ProfilePage() {
       const [p, w, c] = await Promise.all([fPorts(), fWatch(), fConv()]);
       setPorts(p || []); setWatch(w || []); setConvs(c || []);
     } catch (e) { console.warn(e); }
+  };
+
+  // AIAdvisorPage (on a different route entirely, /terminal) picks this up
+  // via the same usePersistentState pending-handoff pattern already used
+  // for "ai_pending_prompt" — there's no shared component tree to prop-drill
+  // a setter through, so localStorage is the handoff mechanism.
+  const loadConversation = (conv: any) => {
+    try {
+      window.localStorage.setItem("moneta_ai_pending_conversation", JSON.stringify(conv.messages || []));
+      window.localStorage.setItem("moneta_page_v1", "ai");
+    } catch {}
+    navigate({ to: "/terminal" });
   };
 
   useEffect(() => {
@@ -119,17 +132,48 @@ function ProfilePage() {
                   <div style={{ fontSize: 12, color: B.yellow, fontWeight: 700 }}>{it.name || it.symbol || it.title}</div>
                   <div style={{ fontSize: 10, color: B.gray2 }}>
                     {tab === "portfolios" && `${(it.holdings || []).length} positions · ${new Date(it.updated_at).toLocaleDateString()}`}
-                    {tab === "watchlist" && `${it.category || ""} · ${new Date(it.created_at).toLocaleDateString()}`}
+                    {tab === "watchlist" && `${it.category || ""} · ${new Date(it.created_at).toLocaleDateString()}${it.target_price != null ? ` · 🔔 ${it.direction} ${it.target_price}` : ""}`}
                     {tab === "ai" && `${(it.messages || []).length} messages · ${new Date(it.updated_at).toLocaleDateString()}`}
                   </div>
                 </div>
-                <button onClick={async () => {
-                  if (tab === "portfolios") await fDelP({ data: { id: it.id } });
-                  if (tab === "watchlist") await fDelW({ data: { id: it.id } });
-                  if (tab === "ai") await fDelC({ data: { id: it.id } });
-                  loadAll();
-                }} style={{ background: "transparent", border: `1px solid ${B.red}`, color: B.red,
-                  padding: "2px 8px", cursor: "pointer", fontSize: 10, fontFamily: FONT }}>DEL</button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {tab === "watchlist" && (
+                    <button onClick={async () => {
+                      const input = window.prompt(
+                        `Alert price for ${it.symbol} (leave blank to clear):`,
+                        it.target_price != null ? String(it.target_price) : ""
+                      );
+                      if (input === null) return;
+                      const price = input.trim() === "" ? null : parseFloat(input);
+                      if (price != null && (!isFinite(price) || price <= 0)) return;
+                      let direction: "above" | "below" | null = it.direction || "above";
+                      if (price != null) {
+                        const dirInput = window.prompt(`Notify when ${it.symbol} goes "above" or "below" ${price}?`, direction);
+                        if (dirInput !== "above" && dirInput !== "below") return;
+                        direction = dirInput;
+                      } else {
+                        direction = null;
+                      }
+                      if (price != null && typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+                        try { await Notification.requestPermission(); } catch {}
+                      }
+                      await fAlertW({ data: { id: it.id, target_price: price, direction } });
+                      loadAll();
+                    }} style={{ background: "transparent", border: `1px solid ${B.border}`, color: B.yellow,
+                      padding: "2px 8px", cursor: "pointer", fontSize: 10, fontFamily: FONT }}>🔔</button>
+                  )}
+                  {tab === "ai" && (
+                    <button onClick={() => loadConversation(it)} style={{ background: "transparent", border: `1px solid ${B.border}`, color: B.blue,
+                      padding: "2px 8px", cursor: "pointer", fontSize: 10, fontFamily: FONT }}>LOAD</button>
+                  )}
+                  <button onClick={async () => {
+                    if (tab === "portfolios") await fDelP({ data: { id: it.id } });
+                    if (tab === "watchlist") await fDelW({ data: { id: it.id } });
+                    if (tab === "ai") await fDelC({ data: { id: it.id } });
+                    loadAll();
+                  }} style={{ background: "transparent", border: `1px solid ${B.red}`, color: B.red,
+                    padding: "2px 8px", cursor: "pointer", fontSize: 10, fontFamily: FONT }}>DEL</button>
+                </div>
               </div>
             ))}
             {(tab === "portfolios" ? ports : tab === "watchlist" ? watch : convs).length === 0 && (

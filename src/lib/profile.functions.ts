@@ -1,5 +1,5 @@
 type Portfolio = { id: string; name: string; holdings: any[]; updated_at: string };
-type Watchlist = { id: string; symbol: string; name?: string; category?: string; created_at: string };
+type Watchlist = { id: string; symbol: string; name?: string; category?: string; created_at: string; target_price?: number | null; direction?: "above" | "below" | null };
 type Convo = { id: string; title: string; messages: any[]; updated_at: string };
 
 import { supabase } from "@/integrations/supabase/client";
@@ -36,13 +36,16 @@ export async function deletePortfolio({ data }: { data: { id: string } }): Promi
   return { ok: true };
 }
 
-export async function addToWatchlist({ data }: { data: { symbol: string; name?: string; category?: string } }): Promise<Watchlist> {
+export async function addToWatchlist({ data }: { data: { symbol: string; name?: string; category?: string; target_price?: number | null; direction?: "above" | "below" | null } }): Promise<Watchlist> {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user;
   if (!user) throw new Error("Not signed in");
   const { data: row, error } = await supabase
     .from("watchlist")
-    .upsert({ user_id: user.id, symbol: data.symbol, name: data.name, category: data.category }, { onConflict: "user_id,symbol" })
+    .upsert({
+      user_id: user.id, symbol: data.symbol, name: data.name, category: data.category,
+      target_price: data.target_price ?? null, direction: data.direction ?? null,
+    }, { onConflict: "user_id,symbol" })
     .select()
     .single();
   if (error) throw error;
@@ -64,6 +67,15 @@ export async function listWatchlist(): Promise<Watchlist[]> {
 
 export async function deleteWatchlist({ data }: { data: { id: string } }): Promise<{ ok: true }> {
   const { error } = await supabase.from("watchlist").delete().eq("id", data.id);
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function updateWatchlistAlert({ data }: { data: { id: string; target_price: number | null; direction: "above" | "below" | null } }): Promise<{ ok: true }> {
+  const { error } = await supabase
+    .from("watchlist")
+    .update({ target_price: data.target_price, direction: data.direction })
+    .eq("id", data.id);
   if (error) throw error;
   return { ok: true };
 }

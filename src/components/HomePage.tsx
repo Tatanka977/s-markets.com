@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
 import {
-  B, fmt, fmtM, pCol, pSign, pMet,
+  B, fmt, fmtM, pCol, pSign, pMet, buildPortfolioContext,
 } from "@/lib/uiShared";
 import { upsertSnapshot, getSnapshots } from "@/lib/profile.functions";
 import { fetchPriceHistory as srvPriceHistory } from "@/lib/finance.functions";
 import { fetchMarketStatus as srvMarketStatus, batchRefresh as srvBatchRefresh } from "@/lib/finance.functions";
 import { fetchMarketNews as srvMarketNews } from "@/lib/news.functions";
 import { savePortfolio } from "@/lib/profile.functions";
+import { aiChat } from "@/lib/ai.functions";
 import { useUser } from "@/hooks/useUser";
+import { usePersistentState } from "@/hooks/usePersistentState";
 
 const FONT = "'Courier New', Courier, monospace";
 const CARD = { background: B.panel, border: `1px solid ${B.border}`, borderRadius: 12 };
@@ -26,6 +28,12 @@ const INDICES = [
   { sym: "IWM", label: "RUSSELL 2000" },
   { sym: "VIX", label: "VOLATILITY" },
   { sym: "TLT", label: "20YR TREASURY" },
+];
+
+const BENCHMARKS = [
+  { sym: "SPY", label: "S&P 500" },
+  { sym: "QQQ", label: "NASDAQ 100" },
+  { sym: "ACWI", label: "MSCI ACWI" },
 ];
 
 function MiniSparkline({ color }: { color: string }) {
@@ -133,15 +141,22 @@ function StatField({ label, value, sub, color }: any) {
   );
 }
 
-function PortfolioOverview({ holdings, m, onSave, saving, saveMsg }: any) {
+function PortfolioOverview({ holdings, transactions, m, onSave, saving, saveMsg }: any) {
   const hasHoldings = holdings.length > 0;
   const totalCost = holdings.reduce((s: number, h: any) => s + (h.costBasis ?? (h.costPrice || 0) * h.qty), 0);
   const totalPL = holdings.reduce((s: number, h: any) => s + (h.value - (h.costBasis ?? (h.costPrice || 0) * h.qty)), 0);
   const totalPLPct = totalCost > 0 ? (totalPL / totalCost * 100) : 0;
+  const cash = holdings.reduce((s: number, h: any) => s + (h.asset.category === "CASH" ? h.value : 0), 0);
+  const thisYear = new Date().getFullYear();
+  const realizedYtd = (transactions || [])
+    .filter((t: any) => t.type === "SELL" && t.realizedPnl != null && new Date(t.date).getFullYear() === thisYear)
+    .reduce((s: number, t: any) => s + t.realizedPnl, 0);
+  const hasSells = (transactions || []).some((t: any) => t.type === "SELL");
+  const hasForeignCcy = holdings.some((h: any) => h.asset.currency && h.asset.currency !== "USD");
 
   return (
     <div style={{ ...CARD, padding: "16px 18px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: hasForeignCcy ? 4 : 16 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: B.blue, letterSpacing: "0.06em", fontFamily: FONT }}>PORTFOLIO OVERVIEW</span>
         <button onClick={onSave} disabled={saving || !hasHoldings} style={{
           background: "none", border: `1px solid ${B.border}`, color: B.blue, fontFamily: FONT,
@@ -149,17 +164,22 @@ function PortfolioOverview({ holdings, m, onSave, saving, saveMsg }: any) {
           opacity: hasHoldings ? 1 : 0.4,
         }}>{saving ? "..." : saveMsg || "SAVE"}</button>
       </div>
+      {hasForeignCcy && (
+        <div style={{ fontSize: 10, color: B.gray3, fontFamily: FONT, marginBottom: 12 }}>
+          Base currency: USD — non-USD holdings converted using live FX rates.
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 14 }}>
         <StatField label="Total Portfolio Value" value={hasHoldings ? `$${fmtM(m.total)}` : "—"} />
         <StatField label="Portfolio Return (Exp.)" value={hasHoldings ? `${pSign(fmt(m.wRet,1))}%` : "—"} color={hasHoldings ? pCol(m.wRet) : undefined} />
         <StatField label="Day Change" value={hasHoldings ? `${pSign(fmt(m.wDay,2))}%` : "—"} color={hasHoldings ? pCol(m.wDay) : undefined} />
-        <StatField label="Cash" value="—" sub="Not tracked yet" />
+        <StatField label="Cash" value={cash > 0 ? `$${fmtM(cash)}` : "—"} sub={cash > 0 ? undefined : "No cash added yet"} />
       </div>
 
       <div style={{ borderTop: `1px solid ${B.border}`, paddingTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 16 }}>
         <StatField label="Unrealized P/L" value={hasHoldings ? `${totalPL>=0?"+":"−"}$${fmtM(Math.abs(totalPL))}` : "—"} sub={hasHoldings ? `(${pSign(fmt(totalPLPct,1))}%)` : undefined} color={hasHoldings ? pCol(totalPL) : undefined} />
-        <StatField label="Realized P/L (YTD)" value="—" sub="Not tracked yet" />
+        <StatField label="Realized P/L (YTD)" value={hasSells ? `${realizedYtd>=0?"+":"−"}$${fmtM(Math.abs(realizedYtd))}` : "—"} sub={hasSells ? undefined : "No sales yet"} color={hasSells ? pCol(realizedYtd) : undefined} />
         <StatField label="Buying Power" value="—" sub="Not tracked yet" />
         <StatField label="Portfolio Status" value={hasHoldings ? <span style={{ color: B.green }}>● Active</span> : <span style={{ color: B.gray3 }}>— Empty</span>} />
       </div>
@@ -169,9 +189,11 @@ function PortfolioOverview({ holdings, m, onSave, saving, saveMsg }: any) {
 
 function PerformancePanel({ holdings }: any) {
   const [range, setRange] = useState<"1M"|"3M"|"6M"|"YTD"|"1Y"|"ALL">("ALL");
+  const [benchmark, setBenchmark] = useState("SPY");
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [earliestDate, setEarliestDate] = useState<string|null>(null);
+  const benchmarkLabel = BENCHMARKS.find(b => b.sym === benchmark)?.label || benchmark;
 
   useEffect(() => {
     let alive = true;
@@ -183,7 +205,7 @@ function PerformancePanel({ holdings }: any) {
     setEarliestDate(earliest);
 
     Promise.all([
-      srvPriceHistory({ data: { symbol: "SPY", range: "max", interval: "1d" } }),
+      srvPriceHistory({ data: { symbol: benchmark, range: "max", interval: "1d" } }),
       ...withDates.map((h:any) =>
         srvPriceHistory({ data: { symbol: h.asset.ticker, range: "max", interval: "1d" } })
           .then((series:any) => ({ ticker: h.asset.ticker, qty: h.qty, buyDt: h.buyDate, series: series || [] }))
@@ -227,7 +249,7 @@ function PerformancePanel({ holdings }: any) {
     }).catch(() => { if (alive) setLoading(false); });
 
     return () => { alive = false; };
-  }, [holdings]);
+  }, [holdings, benchmark]);
 
   const filtered = useMemo(() => {
     if (!chartData.length) return [];
@@ -242,14 +264,25 @@ function PerformancePanel({ holdings }: any) {
     <div style={{ ...CARD, padding: "16px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: B.blue, letterSpacing: "0.06em", fontFamily: FONT }}>PERFORMANCE</span>
-        <div style={{ display: "flex", gap: 2 }}>
-          {(["1M","3M","6M","YTD","1Y","ALL"] as const).map(r => (
-            <button key={r} onClick={() => setRange(r)} style={{
-              background: range === r ? B.blue : "transparent", color: range === r ? B.white : B.gray2,
-              border: "none", fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-              cursor: "pointer", fontFamily: FONT,
-            }}>{r}</button>
-          ))}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 2 }}>
+            {BENCHMARKS.map(b => (
+              <button key={b.sym} onClick={() => setBenchmark(b.sym)} style={{
+                background: benchmark === b.sym ? B.panel2 : "transparent", color: benchmark === b.sym ? B.gray1 : B.gray3,
+                border: `1px solid ${benchmark === b.sym ? B.border : "transparent"}`, fontSize: 10, fontWeight: 700, padding: "3px 6px", borderRadius: 6,
+                cursor: "pointer", fontFamily: FONT,
+              }}>{b.label}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 2 }}>
+            {(["1M","3M","6M","YTD","1Y","ALL"] as const).map(r => (
+              <button key={r} onClick={() => setRange(r)} style={{
+                background: range === r ? B.blue : "transparent", color: range === r ? B.white : B.gray2,
+                border: "none", fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+                cursor: "pointer", fontFamily: FONT,
+              }}>{r}</button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -272,7 +305,7 @@ function PerformancePanel({ holdings }: any) {
               <Tooltip formatter={(v:any)=>v!=null?`${v.toFixed(2)}%`:"—"} contentStyle={{fontFamily:FONT,fontSize:12,borderRadius:8}}/>
               <ReferenceLine y={0} stroke={B.border}/>
               <Line type="monotone" dataKey="portfolio" stroke={B.blue} strokeWidth={2.5} dot={false} name="Your Portfolio"/>
-              <Line type="monotone" dataKey="benchmark" stroke={B.gray3} strokeWidth={1.5} dot={false} name="S&P 500"/>
+              <Line type="monotone" dataKey="benchmark" stroke={B.gray3} strokeWidth={1.5} dot={false} name={benchmarkLabel}/>
               <Legend wrapperStyle={{fontSize:12,fontFamily:FONT}}/>
             </LineChart>
           </ResponsiveContainer>
@@ -281,10 +314,15 @@ function PerformancePanel({ holdings }: any) {
     </div>
   );
 }
-function RecentActivity({ holdings }: any) {
-  const rows = [...holdings]
-    .filter((h: any) => h.buyDate)
-    .sort((a: any, b: any) => new Date(b.buyDt).getTime() - new Date(a.buyDt).getTime())
+const TX_STYLE: Record<string, { bg: string; color: string }> = {
+  BUY:  { bg: "rgba(0,200,120,0.12)", color: "#00C878" },
+  SELL: { bg: "rgba(255,51,51,0.12)", color: "#FF3333" },
+  CASH: { bg: "rgba(0,150,255,0.12)", color: "#0096FF" },
+};
+
+function RecentActivity({ transactions }: any) {
+  const rows = [...(transactions || [])]
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
   return (
@@ -293,7 +331,7 @@ function RecentActivity({ holdings }: any) {
         RECENT ACTIVITY
       </div>
       {!rows.length ? (
-        <div style={{ fontSize: 12, color: B.gray3, fontFamily: FONT, padding: "10px 0" }}>No positions added yet.</div>
+        <div style={{ fontSize: 12, color: B.gray3, fontFamily: FONT, padding: "10px 0" }}>No activity yet.</div>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT }}>
           <thead>
@@ -305,20 +343,29 @@ function RecentActivity({ holdings }: any) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((h: any) => (
-              <tr key={h.isin || h.asset.ticker} style={{ borderTop: `1px solid ${B.border}` }}>
-                <td style={{ padding: "8px 0" }}>
-                  <span style={{ background: "rgba(0,200,120,0.12)", color: B.green, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999 }}>BUY</span>
-                </td>
-                <td style={{ padding: "8px 0", fontSize: 12, color: B.gray1 }}>{h.asset.shortName || h.asset.ticker}</td>
-                <td style={{ padding: "8px 0", fontSize: 12, color: B.red, textAlign: "right" }}>
-                  −${fmtM((h.costPrice || 0) * h.qty)}
-                </td>
-                <td style={{ padding: "8px 0", fontSize: 12, color: B.gray3, textAlign: "right" }}>
-                  {new Date(h.buyDate).toLocaleDateString()}
-                </td>
-              </tr>
-            ))}
+            {rows.map((t: any) => {
+              const st = TX_STYLE[t.type] || TX_STYLE.BUY;
+              const isSell = t.type === "SELL";
+              return (
+                <tr key={t.id} style={{ borderTop: `1px solid ${B.border}` }}>
+                  <td style={{ padding: "8px 0" }}>
+                    <span style={{ background: st.bg, color: st.color, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999 }}>{t.type}</span>
+                  </td>
+                  <td style={{ padding: "8px 0", fontSize: 12, color: B.gray1 }}>{t.shortName || t.ticker}</td>
+                  <td style={{ padding: "8px 0", fontSize: 12, color: isSell ? B.green : B.red, textAlign: "right" }}>
+                    {isSell ? "+" : "−"}${fmtM(t.amount)}
+                    {isSell && t.realizedPnl != null && (
+                      <div style={{ fontSize: 10, color: pCol(t.realizedPnl) }}>
+                        {t.realizedPnl>=0?"+":"−"}${fmtM(Math.abs(t.realizedPnl))} realized
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: "8px 0", fontSize: 12, color: B.gray3, textAlign: "right" }}>
+                    {new Date(t.date).toLocaleDateString()}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -351,7 +398,59 @@ function MarketNewsCard() {
   );
 }
 
-export default function HomePage({ holdings, setPage, onRefresh, refreshing }: any) {
+function DailySummaryCard({ holdings }: any) {
+  const todayYmd = new Date().toISOString().slice(0,10);
+  const portfolioHash = useMemo(() => holdings.map((h:any) => `${h.asset.ticker}:${h.qty}`).sort().join("|"), [holdings]);
+  const [cache, setCache] = usePersistentState<{date:string; hash:string; summary:string} | null>("daily_ai_summary", null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const isFresh = cache && cache.date === todayYmd && cache.hash === portfolioHash;
+
+  const generate = async () => {
+    if (!holdings.length) return;
+    setBusy(true); setError("");
+    try {
+      const sys = `You are STRATEGIC MARKETS AI, an EDUCATIONAL analytics assistant. Write a short (max 120 words) daily portfolio summary: 1-2 notable observations about today's positioning, framed as quantitative/educational, no personalized advice. End with: "DISCLAIMER: For educational and informational purposes only. Not investment advice."`;
+      const prompt = `Today's portfolio snapshot:\n${buildPortfolioContext(holdings)}\n\nWrite today's summary.`;
+      const { reply } = await aiChat({ data: { messages: [{ role: "user", content: prompt }], system: sys } });
+      setCache({ date: todayYmd, hash: portfolioHash, summary: reply });
+    } catch (e: any) {
+      setError("AI error: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!holdings.length) return null;
+
+  return (
+    <div style={{ ...CARD, padding: "16px 18px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: B.blue, letterSpacing: "0.06em", fontFamily: FONT }}>✦ TODAY'S AI SUMMARY</span>
+        <button onClick={generate} disabled={busy} style={{
+          background: "transparent", border: `1px solid ${B.cyan}`, color: B.cyan, padding: "4px 10px", borderRadius: 6,
+          cursor: busy ? "wait" : "pointer", fontFamily: FONT, fontSize: 11, fontWeight: 700,
+        }}>{busy ? "GENERATING…" : isFresh ? "↻ REFRESH" : "GENERATE"}</button>
+      </div>
+      {error && <div style={{ fontSize: 11, color: B.red, fontFamily: FONT }}>{error}</div>}
+      {isFresh ? (
+        <div style={{ fontSize: 12, color: B.gray1, fontFamily: FONT, lineHeight: 1.6 }}>
+          {cache!.summary.split("\n").map((line, i) => {
+            const parts = line.split(/(\*\*[^*]+\*\*)/g);
+            return <div key={i} style={{ marginBottom: 4 }}>{parts.map((p, j) => p.startsWith("**") && p.endsWith("**") ? <b key={j} style={{ color: B.blue }}>{p.slice(2,-2)}</b> : p)}</div>;
+          })}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: B.gray3, fontFamily: FONT, lineHeight: 1.6 }}>
+          Tap Generate for a short AI recap of today's portfolio positioning — educational only, cached for the day.
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function HomePage({ holdings, transactions, setPage, onRefresh, refreshing }: any) {
   const m = useMemo(() => pMet(holdings), [holdings]);
   const { user } = useUser();
   const [saving, setSaving] = useState(false);
@@ -385,14 +484,16 @@ export default function HomePage({ holdings, setPage, onRefresh, refreshing }: a
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 14 }}>
-        <PortfolioOverview holdings={holdings} m={m} onSave={handleSave} saving={saving} saveMsg={saveMsg} />
+        <PortfolioOverview holdings={holdings} transactions={transactions} m={m} onSave={handleSave} saving={saving} saveMsg={saveMsg} />
         <PerformancePanel holdings={holdings}/>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
-        <RecentActivity holdings={holdings} />
+        <RecentActivity transactions={transactions} />
         <MarketNewsCard />
       </div>
+
+      <DailySummaryCard holdings={holdings} />
 
       <div style={{ textAlign: "right" }}>
         <button onClick={onRefresh} disabled={refreshing || !holdings.length} style={{

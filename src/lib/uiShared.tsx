@@ -151,6 +151,26 @@ export function computeAlerts(holdings:any[], m:any) {
   return alerts;
 }
 
+// Plain-text portfolio snapshot fed to the AI as context — shared by the AI
+// advisor chat and the home-page daily summary card.
+export function buildPortfolioContext(holdings:any[]) {
+  if (!holdings.length) return "NO PORTFOLIO LOADED.";
+  const m = pMet(holdings)!;
+  return [
+    `LIVE PORTFOLIO SNAPSHOT (${holdings.length} SECURITIES — LIVE MARKET DATA):`,
+    `MKT VALUE: $${fmtM(m.total)} | EXP RET: ${fmt(m.wRet,2)}% | VOL: ${fmt(m.wVol,2)}% | SHARPE: ${fmt(m.sharpe,2)} | BETA: ${fmt(m.wBeta,2)} | DIV YIELD: ${fmt(m.wDiv,2)}%`,
+    `SECTORS: ${m.sectors} | GEO REGIONS: ${m.geos} | HHI: ${fmt(m.hhi,0)}`,
+    "POSITIONS: "+holdings.map((h:any)=>`${h.asset.ticker}(WT:${(h.value/m.total*100).toFixed(0)}%,VOL:${h.asset.vol??'N/A'}%,BETA:${h.asset.beta??'N/A'},YTD:${h.asset.ytd??'N/A'}%,1D:${h.asset.dayChangePct??'N/A'}%,SECT:${h.asset.sector||'N/A'})`).join(" | "),
+  ].join("\n");
+}
+
+// Compound annual growth rate between two values `days` apart.
+export function computeCagr(startValue: number, endValue: number, days: number) {
+  if (!(startValue > 0)) return 0;
+  const years = Math.max(days / 365, 1 / 365);
+  return (Math.pow(endValue / startValue, 1 / years) - 1) * 100;
+}
+
 export const SEV_STYLE:any = {
   HIGH: { border: "#FF3333", bg: "rgba(255,51,51,0.08)", text: "#FF3333", icon: "⚠", label: "HIGH RISK" },
   MED:  { border: "#FFA500", bg: "rgba(255,165,0,0.08)", text: "#FFA500", icon: "◆", label: "MEDIUM" },

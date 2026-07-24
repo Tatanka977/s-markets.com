@@ -31,12 +31,14 @@ import {
   deletePortfolio,
   saveConversation,
   addToWatchlist as srvAddWatch,
+  listWatchlist,
 } from "@/lib/profile.functions";
 import { useUser } from "@/hooks/useUser";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import { useTheme } from "@/hooks/useTheme";
 import { Link } from "@tanstack/react-router";
-import { B, PIE_COLS, fmt, fmtM, pCol, pSign, groupBy, pMet, FKey, BPanel } from "@/lib/uiShared";
+import { z } from "zod";
+import { B, PIE_COLS, fmt, fmtM, pCol, pSign, groupBy, pMet, FKey, BPanel, buildPortfolioContext } from "@/lib/uiShared";
 
 export { B, PIE_COLS, fmt, fmtM, pCol, pSign, groupBy, pMet, FKey, BPanel };
 
@@ -500,7 +502,7 @@ function PricePerformancePanel({symbol, currency}:any) {
     </div>
   );
 }
-function SearchPage({onAdd,portfolio}:any) {
+function SearchPage({onAdd,portfolio,onWatchlistChange}:any) {
   const isMobile = useIsMobile();
   const [q,setQ] = useState<string>("");
   const [results,setRes] = useState<any[]>([]);
@@ -609,11 +611,37 @@ useEffect(()=>{
     try {
       await srvAddWatch({ data: { symbol: detail.ticker || detail.symbol, name: detail.shortName, category: detail.category } });
       setWatchMsg("✓ ADDED");
+      onWatchlistChange?.();
     } catch(e:any) {
       setWatchMsg("ERR: " + (e.message || "").slice(0, 30));
     } finally {
       setWatchBusy(false);
       setTimeout(() => setWatchMsg(""), 2000);
+    }
+  };
+
+  const [showAlertForm, setShowAlertForm] = useState(false);
+  const [alertPrice, setAlertPrice] = useState("");
+  const [alertDir, setAlertDir] = useState<"above"|"below">("above");
+  const [alertMsg, setAlertMsg] = useState("");
+  const saveAlert = async () => {
+    if (!detail) return;
+    if (!user) { window.location.href = "/auth"; return; }
+    const target = parseFloat(alertPrice);
+    if (!isFinite(target) || target <= 0) { setAlertMsg("Enter a valid price"); return; }
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      try { await Notification.requestPermission(); } catch {}
+    }
+    setWatchBusy(true); setAlertMsg("");
+    try {
+      await srvAddWatch({ data: { symbol: detail.ticker || detail.symbol, name: detail.shortName, category: detail.category, target_price: target, direction: alertDir } });
+      setAlertMsg("✓ ALERT SET");
+      onWatchlistChange?.();
+      setTimeout(() => { setAlertMsg(""); setShowAlertForm(false); }, 1500);
+    } catch (e:any) {
+      setAlertMsg("ERR: " + (e.message || "").slice(0, 30));
+    } finally {
+      setWatchBusy(false);
     }
   };
 
@@ -679,8 +707,35 @@ useEffect(()=>{
             cursor:watchBusy?"wait":"pointer",fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700}}>
             {watchBusy ? "..." : watchMsg || "☆ ADD TO WATCHLIST"}
           </button>
+          <button onClick={()=>setShowAlertForm(v=>!v)} style={{
+            background:showAlertForm?B.panel2:"none",border:`1px solid ${B.border}`,color:B.yellow,padding:"8px 16px",borderRadius:8,
+            cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700}}>
+            🔔 PRICE ALERT
+          </button>
         </div>
       </div>
+
+      {showAlertForm && (
+        <div style={{background:B.panel,border:`1px solid ${B.yellow}`,borderRadius:12,padding:"12px 16px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:12,color:B.gray2,fontFamily:"'Courier New',monospace"}}>NOTIFY ME WHEN {detail.ticker} GOES</span>
+          <select value={alertDir} onChange={e=>setAlertDir(e.target.value as any)} style={{
+            background:B.panel2,border:`1px solid ${B.border}`,color:B.yellow,borderRadius:6,padding:"6px 8px",
+            fontFamily:"'Courier New',monospace",fontSize:12}}>
+            <option value="above">ABOVE</option>
+            <option value="below">BELOW</option>
+          </select>
+          <input value={alertPrice} onChange={e=>setAlertPrice(e.target.value)} type="number" min="0" step="any"
+            placeholder={detail.price!=null?detail.price.toFixed(2):"PRICE"}
+            style={{width:100,background:B.panel2,border:`1px solid ${B.border}`,color:B.gray1,borderRadius:6,
+              padding:"6px 8px",fontSize:12,fontFamily:"'Courier New',monospace",outline:"none"}}/>
+          <button onClick={saveAlert} disabled={watchBusy} style={{
+            background:B.blue,border:"none",color:B.white,padding:"6px 14px",borderRadius:6,
+            cursor:watchBusy?"wait":"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:700}}>
+            {watchBusy ? "..." : alertMsg || "SET ALERT"}
+          </button>
+          <span style={{fontSize:10,color:B.gray3,fontFamily:"'Courier New',monospace"}}>Requires browser notification permission &amp; the app open in a tab.</span>
+        </div>
+      )}
 
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"2fr 1fr",gap:14}}>
         <PricePerformancePanel symbol={detail.ticker} currency={detail.currency}/>
@@ -884,11 +939,141 @@ function EditableCell({value, onSave, type="text", format}:any) {
     </span>
   );
 }
-function PortfolioPage({holdings,onRemove,onUpdate,onLoadPortfolio,onAddCash}:any) {
+// ─── CSV export/import — hand-rolled, no library. Our own schema only
+// (symbol,qty,costPrice,buyDate,category), so no general RFC4180 handling
+// is needed beyond basic quoting for commas/quotes in a field. ─────────────
+function csvEscape(v:any) {
+  let s = String(v ?? "");
+  // CSV-injection hygiene: neutralize leading formula characters, since
+  // `symbol`/`category` ultimately originate from an external API response.
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  if (/[",\n]/.test(s)) s = `"${s.replace(/"/g,'""')}"`;
+  return s;
+}
+
+function parseCsvLine(line:string): string[] {
+  const cells:string[] = [];
+  let cur = "", inQuotes = false;
+  for (let i=0; i<line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i+1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ",") { cells.push(cur); cur = ""; }
+      else cur += c;
+    }
+  }
+  cells.push(cur);
+  return cells;
+}
+
+function exportHoldingsCsv(holdings:any[]) {
+  const header = "symbol,qty,costPrice,buyDate,category";
+  const rows = holdings.map(h => [
+    h.asset.ticker || h.asset.symbol || "",
+    h.qty,
+    h.costPrice,
+    h.buyDate ? h.buyDate.slice(0,10) : "",
+    h.asset.category || "",
+  ].map(csvEscape).join(","));
+  const csv = [header, ...rows].join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `strategic-markets-portfolio-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+const CsvRowSchema = z.object({
+  symbol: z.string().trim().min(1),
+  qty: z.coerce.number().positive(),
+  costPrice: z.coerce.number().nonnegative(),
+  buyDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"),
+  category: z.string().trim().optional(),
+});
+
+function parseHoldingsCsv(text:string) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (!lines.length) return [];
+  const header = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
+  const idx = (name:string) => header.indexOf(name);
+  return lines.slice(1).map((line, i) => {
+    const cells = parseCsvLine(line);
+    const raw = {
+      symbol: cells[idx("symbol")] ?? "",
+      qty: cells[idx("qty")] ?? "",
+      costPrice: cells[idx("costprice")] ?? "",
+      buyDate: cells[idx("buydate")] ?? "",
+      category: idx("category") >= 0 ? cells[idx("category")] : undefined,
+    };
+    const parsed = CsvRowSchema.safeParse(raw);
+    return parsed.success
+      ? { row: i+2, ok: true as const, data: parsed.data }
+      : { row: i+2, ok: false as const, raw, error: parsed.error.issues.map(e=>e.message).join("; ") };
+  });
+}
+
+function ImportCsvModal({rows, onCancel, onConfirm, busy}:any) {
+  const validCount = rows.filter((r:any) => r.ok).length;
+  return (
+    <div style={{
+      position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:9999,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16,
+      fontFamily:"'Courier New',monospace",
+    }}>
+      <div style={{maxWidth:520, width:"100%", maxHeight:"80vh", display:"flex", flexDirection:"column", background:B.bg, border:`2px solid ${B.blue}`}}>
+        <div style={{background:B.blue, padding:"6px 10px", color:"#fff", fontWeight:700, fontSize:14, letterSpacing:"0.08em", flexShrink:0}}>
+          IMPORT CSV — {validCount}/{rows.length} ROWS VALID
+        </div>
+        <div style={{overflowY:"auto", padding:"10px 14px", flex:1}}>
+          {rows.map((r:any, i:number) => (
+            <div key={i} style={{padding:"6px 0", borderBottom:`1px solid ${B.border}`, fontSize:12}}>
+              {r.ok ? (
+                <span style={{color:B.gray1}}>
+                  <span style={{color:B.green,fontWeight:700}}>✓ Row {r.row}</span> — {r.data.symbol} · qty {r.data.qty} · cost {r.data.costPrice} · {r.data.buyDate}
+                </span>
+              ) : (
+                <span style={{color:B.red}}>
+                  <span style={{fontWeight:700}}>✗ Row {r.row}</span> — {r.error}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex", gap:8, padding:"10px 14px", flexShrink:0, borderTop:`1px solid ${B.border}`}}>
+          <button onClick={onCancel} disabled={busy} style={{
+            flex:1, background:"transparent", border:`1px solid ${B.border}`, color:B.gray1, padding:"10px",
+            fontFamily:"'Courier New',monospace", fontSize:13, fontWeight:700, cursor:busy?"wait":"pointer", borderRadius:6,
+          }}>CANCEL</button>
+          <button onClick={onConfirm} disabled={busy || !validCount} style={{
+            flex:1, background:(busy||!validCount)?B.panel2:B.blue, border:"none",
+            color:(busy||!validCount)?B.gray3:"#fff", padding:"10px", borderRadius:6,
+            fontFamily:"'Courier New',monospace", fontSize:13, fontWeight:700,
+            cursor:(busy||!validCount)?"not-allowed":"pointer",
+          }}>{busy?"IMPORTING...":`IMPORT ${validCount} POSITION${validCount===1?"":"S"}`}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortfolioPage({holdings,onRemove,onUpdate,onSell,onLoadPortfolio,onAddCash}:any) {
   const isMobile = useIsMobile();
   const m=useMemo(()=>pMet(holdings),[holdings]);
   const { user } = useUser();
   const [view, setView] = useState<"positions"|"saved">("positions");
+  const [sellTarget, setSellTarget] = useState<any>(null);
+  const [importRows, setImportRows] = useState<any[]|null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const fileInputRef = useRef<any>(null);
   const [savedList, setSavedList] = useState<any[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
 
@@ -932,6 +1117,31 @@ const addCash = () => {
     };
     onAddCash(cashAsset, amount, 1, new Date().toISOString().slice(0,10));
   };
+  const handleFileSelected = async (e:any) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const text = await file.text();
+    setImportRows(parseHoldingsCsv(text));
+  };
+  const confirmImport = async () => {
+    if (!importRows) return;
+    setImportBusy(true);
+    try {
+      for (const r of importRows) {
+        if (!r.ok) continue;
+        try {
+          const asset = await fetchQuote(r.data.symbol);
+          onAddCash(asset, r.data.qty, r.data.costPrice, r.data.buyDate);
+        } catch (e:any) {
+          console.warn(`[Strategic Markets] import row ${r.row} failed:`, e.message);
+        }
+      }
+    } finally {
+      setImportBusy(false);
+      setImportRows(null);
+    }
+  };
   const Tabs = (
     <div style={{display:"flex",gap:16,borderBottom:`1px solid ${B.border}`,padding:"0 4px",flexShrink:0,alignItems:"center",justifyContent:"space-between"}}>
       <div style={{display:"flex",gap:16}}>
@@ -947,11 +1157,24 @@ const addCash = () => {
         </button>
       ))}
       </div>
-      <button onClick={addCash} style={{
-        background:"transparent", border:`1px solid ${B.green}`, color:B.green,
-        padding:"6px 12px", borderRadius:6, cursor:"pointer",
-        fontFamily:"'Courier New',monospace", fontSize:12, fontWeight:700, marginRight:4,
-      }}>+ ADD CASH</button>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <button onClick={addCash} style={{
+          background:"transparent", border:`1px solid ${B.green}`, color:B.green,
+          padding:"6px 12px", borderRadius:6, cursor:"pointer",
+          fontFamily:"'Courier New',monospace", fontSize:12, fontWeight:700,
+        }}>+ ADD CASH</button>
+        <button onClick={()=>exportHoldingsCsv(holdings)} disabled={!holdings.length} style={{
+          background:"transparent", border:`1px solid ${B.border}`, color:holdings.length?B.gray1:B.gray3,
+          padding:"6px 12px", borderRadius:6, cursor:holdings.length?"pointer":"not-allowed",
+          fontFamily:"'Courier New',monospace", fontSize:12, fontWeight:700,
+        }}>↓ EXPORT CSV</button>
+        <button onClick={()=>fileInputRef.current?.click()} style={{
+          background:"transparent", border:`1px solid ${B.border}`, color:B.gray1,
+          padding:"6px 12px", borderRadius:6, cursor:"pointer",
+          fontFamily:"'Courier New',monospace", fontSize:12, fontWeight:700,
+        }}>↑ IMPORT CSV</button>
+        <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelected} style={{display:"none"}}/>
+      </div>
     </div>
   );
 
@@ -993,6 +1216,14 @@ const addCash = () => {
             </div>
           )}
         </div>
+        {importRows && (
+          <ImportCsvModal
+            rows={importRows}
+            busy={importBusy}
+            onCancel={()=>setImportRows(null)}
+            onConfirm={confirmImport}
+          />
+        )}
       </div>
     );
   }
@@ -1005,6 +1236,14 @@ const addCash = () => {
           NO SECURITIES IN PORTFOLIO<br/>USE SEARCH TO ADD LIVE POSITIONS
         </div>
       </div>
+      {importRows && (
+        <ImportCsvModal
+          rows={importRows}
+          busy={importBusy}
+          onCancel={()=>setImportRows(null)}
+          onConfirm={confirmImport}
+        />
+      )}
     </div>
   );
 
@@ -1021,6 +1260,8 @@ const addCash = () => {
   const totalCost = holdings.reduce((s:number,h:any) => s + (h.costBasis ?? (h.costPrice||0)*h.qty), 0);
   const totalPL = holdings.reduce((s:number,h:any) => s + (h.value - (h.costBasis ?? (h.costPrice||0)*h.qty)), 0);
   const totalPLPct = totalCost > 0 ? (totalPL/totalCost*100) : 0;
+  const cash = holdings.reduce((s:number,h:any) => s + (h.asset.category === "CASH" ? h.value : 0), 0);
+  const cashPct = m.total > 0 ? (cash / m.total) * 100 : 0;
 
   const sD = groupBy(holdings,"sector",m.total);
   const gD = groupBy(holdings,"geo",m.total);
@@ -1052,8 +1293,8 @@ const addCash = () => {
         </div>
         <div>
           <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace"}}>Cash</div>
-          <div style={{fontSize:20,fontWeight:700,color:B.gray3,fontFamily:"'Courier New',monospace"}}>—</div>
-          <div style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace"}}>Not tracked yet</div>
+          <div style={{fontSize:20,fontWeight:700,color:B.gray1,fontFamily:"'Courier New',monospace"}}>{cash>0?`$${fmtM(cash)}`:"—"}</div>
+          <div style={{fontSize:11,color:B.gray3,fontFamily:"'Courier New',monospace"}}>{cash>0?`${cashPct.toFixed(1)}% of portfolio`:"No cash added yet"}</div>
         </div>
         <div>
           <div style={{fontSize:10,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace"}}>Positions</div>
@@ -1090,7 +1331,7 @@ const addCash = () => {
               {l:"TOP HOLDING", v:sorted[0]?.asset.ticker || "—", sub:sorted[0]?`${((sorted[0].value/m.total)*100).toFixed(1)}%`:""},
               {l:"LARGEST SECTOR", v:sD[0]?.name || "—", sub:sD[0]?`${sD[0].pct}%`:""},
               {l:"LARGEST REGION", v:gD[0]?.name || "—", sub:gD[0]?`${gD[0].pct}%`:""},
-              {l:"CASH POSITION", v:"—", sub:"Not tracked"},
+              {l:"CASH POSITION", v:cash>0?`$${fmtM(cash)}`:"—", sub:cash>0?`${cashPct.toFixed(1)}%`:"Not tracked"},
             ].map((c,i)=>(
               <div key={i} style={{background:B.panel2,borderRadius:8,padding:"10px 12px"}}>
                 <div style={{fontSize:9,color:B.gray3,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Courier New',monospace",marginBottom:4}}>{c.l}</div>
@@ -1157,7 +1398,12 @@ const addCash = () => {
                 const plPct = (cb!=null && cb>0) ? (pl!/cb*100) : null;
                 return (
                   <tr key={h.isin||h.asset.ticker} style={{borderTop:`1px solid ${B.border}`}}>
-                    <td style={{padding:"6px",color:B.blue,fontWeight:700}}>{h.asset.ticker}</td>
+                    <td style={{padding:"6px",color:B.blue,fontWeight:700}}>
+                      {h.asset.ticker}
+                      {h.asset.currency && h.asset.currency!=="USD" && (
+                        <span style={{fontSize:9,color:B.gray3,fontWeight:400,marginLeft:4}} title="Values in this row are in the asset's native currency, not converted">{h.asset.currency}</span>
+                      )}
+                    </td>
                     <td style={{padding:"6px",color:B.gray1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{h.asset.shortName||h.asset.ticker}</td>
                     <td style={{padding:"6px",textAlign:"right",color:B.gray1}}>{h.asset.price!=null?h.asset.price.toFixed(2):"—"}</td>
                     <td style={{padding:"6px",textAlign:"right",color:pCol(h.asset.dayChangePct),fontWeight:700}}>
@@ -1200,7 +1446,11 @@ const addCash = () => {
     }}
   />
 </td>
-                    <td style={{padding:"6px",textAlign:"center"}}>
+                    <td style={{padding:"6px",textAlign:"center",whiteSpace:"nowrap"}}>
+                      <button onClick={()=>setSellTarget(h)} style={{
+                        background:"none",border:`1px solid ${B.red}`,color:B.red,borderRadius:6,
+                        cursor:"pointer",fontSize:11,padding:"2px 8px",marginRight:4,
+                      }}>SELL</button>
                       <button onClick={()=>onRemove(h.isin||h.asset.ticker)} style={{
                         background:"none",border:`1px solid ${B.border}`,color:B.gray3,borderRadius:6,
                         cursor:"pointer",fontSize:11,padding:"2px 8px",
@@ -1237,6 +1487,122 @@ const addCash = () => {
             <div style={{fontSize:12,color:B.gray1,fontFamily:"'Courier New',monospace",lineHeight:1.5}}>
               Portfolio volatility is <b style={{color:B.blue}}>{fmt(m.wVol,1)}%</b> (annualized estimate).
             </div>
+          </div>
+        </div>
+      </div>
+      {sellTarget && (
+        <SellModal
+          holding={sellTarget}
+          onCancel={()=>setSellTarget(null)}
+          onConfirm={(qty:number, price:number, date:string)=>{
+            onSell(sellTarget.isin||sellTarget.asset.ticker, qty, price, date);
+            setSellTarget(null);
+          }}
+        />
+      )}
+      {importRows && (
+        <ImportCsvModal
+          rows={importRows}
+          busy={importBusy}
+          onCancel={()=>setImportRows(null)}
+          onConfirm={confirmImport}
+        />
+      )}
+    </div>
+  );
+}
+
+function SellModal({holding, onCancel, onConfirm}:any) {
+  const [qty, setQty] = useState(String(holding.qty));
+  const [price, setPrice] = useState(holding.asset.price!=null ? String(holding.asset.price.toFixed(2)) : "");
+  const [date, setDate] = useState(new Date().toISOString().slice(0,10));
+  const [histInfo, setHistInfo] = useState<{kind:"ok"|"warn"|"err"|null; text:string}>({kind:null, text:""});
+  const [histBusy, setHistBusy] = useState(false);
+  const todayYmd = new Date().toISOString().slice(0,10);
+
+  const handleDateChange = async (newDate:string) => {
+    setDate(newDate);
+    if (!newDate || newDate === todayYmd || newDate > todayYmd) { setHistInfo({kind:null, text:""}); return; }
+    setHistBusy(true); setHistInfo({kind:null, text:"Fetching historical price..."});
+    try {
+      const res = await fetchHistoricalPrice(holding.asset.ticker, newDate);
+      if (res.price != null) {
+        setPrice(res.price.toFixed(2));
+        setHistInfo({kind:"ok", text: res.actualDate === newDate ? `Historical close (${res.actualDate})` : `No trading on ${newDate}. Using close of ${res.actualDate}`});
+      } else {
+        setHistInfo({kind:"warn", text:`Historical price unavailable — using current price. Reason: ${res.reason || "not found"}`});
+      }
+    } catch (e:any) {
+      setHistInfo({kind:"err", text:`Lookup error — using current price. (${e.message || "network"})`});
+    } finally { setHistBusy(false); }
+  };
+
+  const qtyNum = parseFloat(qty) || 0;
+  const priceNum = parseFloat(price) || 0;
+  const validQty = qtyNum > 0 && qtyNum <= holding.qty;
+  const proceeds = qtyNum * priceNum;
+  const costOfSold = qtyNum * (holding.costPrice || 0);
+  const estRealizedPnl = proceeds - costOfSold;
+
+  return (
+    <div data-testid="sell-modal" style={{
+      position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:9999,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16,
+      fontFamily:"'Courier New',monospace",
+    }}>
+      <div style={{maxWidth:420, width:"100%", background:B.bg, border:`2px solid ${B.red}`}}>
+        <div style={{background:B.red, padding:"6px 10px", color:"#000", fontWeight:700, fontSize:14, letterSpacing:"0.08em"}}>
+          SELL {holding.asset.ticker}
+        </div>
+        <div style={{padding:"14px 16px", color:B.gray1, fontSize:13, display:"flex", flexDirection:"column", gap:10}}>
+          <div style={{fontSize:11, color:B.gray3}}>You currently hold {fmt(holding.qty, holding.qty<1?4:2)} shares @ avg cost {holding.costPrice!=null?holding.costPrice.toFixed(2):"—"}.</div>
+          <div>
+            <div style={{fontSize:10,color:B.gray3,marginBottom:2}}>QUANTITY TO SELL</div>
+            <input value={qty} onChange={e=>setQty(e.target.value)} type="number" min="0" max={holding.qty} step="any"
+              style={{width:"100%",background:B.panel2,border:`1px solid ${validQty?B.border:B.red}`,color:B.gray1,borderRadius:6,
+                padding:"6px 8px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:B.gray3,marginBottom:2}}>SELL PRICE</div>
+            <input value={price} onChange={e=>setPrice(e.target.value)} type="number" min="0" step="any"
+              style={{width:"100%",background:B.panel2,border:`1px solid ${B.border}`,color:B.gray1,borderRadius:6,
+                padding:"6px 8px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:B.gray3,marginBottom:2}}>SALE DATE</div>
+            <input value={date} onChange={e=>handleDateChange(e.target.value)} type="date" max={todayYmd}
+              style={{width:"100%",background:B.panel2,border:`1px solid ${histBusy?B.blue:B.border}`,color:B.gray1,borderRadius:6,
+                padding:"6px 8px",fontSize:13,fontFamily:"'Courier New',monospace",outline:"none"}}/>
+          </div>
+          {histInfo.text && (
+            <div style={{padding:"6px 10px",fontSize:11,fontWeight:700,borderRadius:6,
+              border:`1px solid ${histInfo.kind==="ok"?B.green:histInfo.kind==="warn"?B.yellow:histInfo.kind==="err"?B.red:B.border}`,
+              color: histInfo.kind==="ok"?B.green:histInfo.kind==="warn"?B.yellow:histInfo.kind==="err"?B.red:B.gray2}}>
+              {histInfo.text}
+            </div>
+          )}
+          <div style={{display:"flex",justifyContent:"space-between",background:B.panel2,borderRadius:8,padding:"8px 10px"}}>
+            <span style={{fontSize:11,color:B.gray3}}>Est. realized P&amp;L</span>
+            <span style={{fontSize:13,fontWeight:700,color:pCol(estRealizedPnl)}}>
+              {qtyNum>0?`${estRealizedPnl>=0?"+":"−"}$${fmtM(Math.abs(estRealizedPnl))}`:"—"}
+            </span>
+          </div>
+          {!validQty && <div style={{fontSize:11,color:B.red}}>Quantity must be greater than 0 and at most {fmt(holding.qty, holding.qty<1?4:2)}.</div>}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={onCancel} style={{
+              flex:1,background:"transparent",border:`1px solid ${B.border}`,color:B.gray1,padding:"10px",
+              fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700,cursor:"pointer",borderRadius:6,
+            }}>CANCEL</button>
+            <button
+              data-testid="sell-confirm-btn"
+              disabled={!validQty || priceNum<=0}
+              onClick={()=>onConfirm(qtyNum, priceNum, date)}
+              style={{
+                flex:1,background:(validQty && priceNum>0)?B.red:B.panel2,border:"none",
+                color:(validQty && priceNum>0)?"#fff":B.gray3,padding:"10px",borderRadius:6,
+                fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:700,
+                cursor:(validQty && priceNum>0)?"pointer":"not-allowed",
+            }}>CONFIRM SELL</button>
           </div>
         </div>
       </div>
@@ -1291,22 +1657,23 @@ function AIAdvisorPage({holdings}:any) {
       send(toSend);
     }
   }, [pendingPrompt]);
+
+  // Loads a conversation handed off from the profile page's AI CHAT tab
+  // (different route — same cross-route handoff mechanism as pendingPrompt above).
+  const [pendingConvo, setPendingConvo] = usePersistentState<any[]|null>("ai_pending_conversation", null);
+  useEffect(() => {
+    if (pendingConvo && pendingConvo.length) {
+      setMsgs(pendingConvo);
+      setPendingConvo(null);
+    }
+  }, [pendingConvo]);
   const [input,setInput]=useState("");
   const [loading,setLoading]=useState(false);
   const [showQ,setShowQ]=useState(true);
   const bottomRef=useRef<any>(null);
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[msgs]);
 
-  const portCtx=useCallback(()=>{
-    if(!holdings.length) return "NO PORTFOLIO LOADED.";
-    const m=pMet(holdings)!;
-    return [
-      `LIVE PORTFOLIO SNAPSHOT (${holdings.length} SECURITIES — LIVE MARKET DATA):`,
-      `MKT VALUE: $${fmtM(m.total)} | EXP RET: ${fmt(m.wRet,2)}% | VOL: ${fmt(m.wVol,2)}% | SHARPE: ${fmt(m.sharpe,2)} | BETA: ${fmt(m.wBeta,2)} | DIV YIELD: ${fmt(m.wDiv,2)}%`,
-      `SECTORS: ${m.sectors} | GEO REGIONS: ${m.geos} | HHI: ${fmt(m.hhi,0)}`,
-      "POSITIONS: "+holdings.map(h=>`${h.asset.ticker}(WT:${(h.value/m.total*100).toFixed(0)}%,VOL:${h.asset.vol??'N/A'}%,BETA:${h.asset.beta??'N/A'},YTD:${h.asset.ytd??'N/A'}%,1D:${h.asset.dayChangePct??'N/A'}%,SECT:${h.asset.sector||'N/A'})`).join(" | "),
-    ].join("\n");
-  },[holdings]);
+  const portCtx=useCallback(()=>buildPortfolioContext(holdings),[holdings]);
 
   const send=async(text?:string)=>{
     const msg=text||input.trim();
@@ -1853,6 +2220,7 @@ function highlightKeyword(text:string, tokens:string[]) {
 export default function PortfolioTerminal() {
   const [page,setPage]     = useState("home");
   const [holdings,setHoldings] = useState<any[]>([]);
+  const [transactions,setTransactions] = useState<any[]>([]);
   const [refreshing,setRefreshing] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
@@ -1866,6 +2234,11 @@ export default function PortfolioTerminal() {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) setHoldings(parsed);
+      }
+      const rawTx = localStorage.getItem("moneta_transactions_v1");
+      if (rawTx) {
+        const parsedTx = JSON.parse(rawTx);
+        if (Array.isArray(parsedTx)) setTransactions(parsedTx);
       }
       const p = localStorage.getItem("moneta_page_v1");
       if (p && ["home","search","portfolio","analysis","ai","news"].includes(p)) setPage(p);
@@ -1894,6 +2267,16 @@ export default function PortfolioTerminal() {
     }
   }, [holdings, hydrated]);
 
+  // Persist the transaction log whenever it changes (after first hydration).
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+    try {
+      localStorage.setItem("moneta_transactions_v1", JSON.stringify(transactions));
+    } catch (e) {
+      console.warn("[Strategic Markets] persist transactions error:", e);
+    }
+  }, [transactions, hydrated]);
+
   // Persist active page so even a hard reload puts the user back where they were.
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return;
@@ -1904,12 +2287,42 @@ export default function PortfolioTerminal() {
   const holdingsRef = useRef<any[]>(holdings);
   useEffect(() => { holdingsRef.current = holdings; }, [holdings]);
 
+  // ── PRICE ALERTS ─────────────────────────────────────────────────────────
+  // Watchlist entries with a target_price/direction are checked on the same
+  // 60s cycle as holdings prices, and fire a browser Notification once per
+  // crossing (per session — `notifiedRef` isn't persisted).
+  const { user } = useUser();
+  const [watchlist, setWatchlist] = useState<any[]>([]);
+  const watchlistRef = useRef<any[]>([]);
+  useEffect(() => { watchlistRef.current = watchlist; }, [watchlist]);
+  const notifiedRef = useRef<Set<string>>(new Set());
+
+  const loadWatchlist = useCallback(async () => {
+    if (!user) { setWatchlist([]); return; }
+    try {
+      const list = await listWatchlist();
+      setWatchlist(list || []);
+    } catch (e:any) {
+      console.warn("[Strategic Markets] listWatchlist failed:", e.message);
+    }
+  }, [user]);
+  useEffect(() => { loadWatchlist(); }, [loadWatchlist]);
+
+  const logTransaction = useCallback((tx: any) => {
+    setTransactions(prev => [{
+      id: "tx_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8),
+      date: new Date().toISOString().slice(0,10),
+      ...tx,
+    }, ...prev]);
+  }, []);
+
   const addToPortfolio = useCallback((asset:any, qty:number, costPrice?:number, buyDate?:string) => {
+    const cp = costPrice ?? asset.price ?? 0;
+    const bd = buyDate || new Date().toISOString().slice(0,10);
+    const isCash = asset.category === "CASH";
     setHoldings(prev => {
       const key = asset.ticker || asset.symbol;
       const idx = prev.findIndex(h => h.asset.ticker===key || h.asset.symbol===key);
-      const cp = costPrice ?? asset.price ?? 0;
-      const bd = buyDate || new Date().toISOString().slice(0,10);
       const value = qty * (asset.price ?? cp);
       const cost  = qty * cp;
       if (idx>=0) {
@@ -1933,7 +2346,13 @@ export default function PortfolioTerminal() {
         costPrice:cp, costBasis:cost, buyDate:bd,
         lots:[{qty,price:cp,date:bd}]}];
     });
-  }, []);
+    logTransaction({
+      type: isCash ? "CASH" : "BUY",
+      ticker: asset.ticker || asset.symbol,
+      shortName: asset.shortName,
+      qty, price: cp, amount: qty * cp, date: bd,
+    });
+  }, [logTransaction]);
 
   const removeFromPortfolio = useCallback((key:string) =>
     setHoldings(h => h.filter(x => x.isin!==key && x.asset.ticker!==key)), []);
@@ -1952,39 +2371,143 @@ export default function PortfolioTerminal() {
     }));
   }, []);
 
+  // FIFO sell: consumes the holding's oldest lots first, computes realized
+  // P&L on exactly the shares sold, and logs a SELL transaction.
+  const sellFromPortfolio = useCallback((key:string, sellQty:number, sellPrice:number, sellDate?:string) => {
+    const sd = sellDate || new Date().toISOString().slice(0,10);
+    let realizedPnl = 0;
+    let actualQty = 0;
+    let sold: {ticker:string; shortName?:string} | null = null;
+    setHoldings(prev => {
+      const idx = prev.findIndex(h => h.isin===key || h.asset.ticker===key);
+      if (idx < 0) return prev;
+      const h = prev[idx];
+      sold = { ticker: h.asset.ticker, shortName: h.asset.shortName };
+      const qtyToSell = Math.min(sellQty, h.qty);
+      actualQty = qtyToSell;
+      let remaining = qtyToSell;
+      const lots = [...(h.lots || [{qty:h.qty, price:h.costPrice||0, date:h.buyDate}])];
+      let costOfSold = 0;
+      const newLots: any[] = [];
+      for (const lot of lots) {
+        if (remaining <= 0) { newLots.push(lot); continue; }
+        const take = Math.min(lot.qty, remaining);
+        costOfSold += take * lot.price;
+        remaining -= take;
+        const left = lot.qty - take;
+        if (left > 0) newLots.push({...lot, qty: left});
+      }
+      realizedPnl = (qtyToSell * sellPrice) - costOfSold;
+
+      const newQty = h.qty - qtyToSell;
+      if (newQty <= 0) {
+        return prev.filter((_,i) => i !== idx);
+      }
+      const newCostBasis = newLots.reduce((s,l) => s + l.qty*l.price, 0);
+      const n = [...prev];
+      n[idx] = {
+        ...h, qty:newQty, lots:newLots,
+        costBasis:newCostBasis, costPrice:newCostBasis/newQty,
+        value: newQty * (h.asset.price ?? h.costPrice ?? 0),
+      };
+      return n;
+    });
+    if (sold) {
+      logTransaction({
+        type: "SELL",
+        ticker: (sold as any).ticker,
+        shortName: (sold as any).shortName,
+        qty: actualQty, price: sellPrice, amount: actualQty*sellPrice, date: sd,
+        realizedPnl,
+      });
+    }
+  }, [logTransaction]);
+
   // Stable callback — no holdings dep, reads from ref. Won't recreate on each price tick.
   const refreshPrices = useCallback(async () => {
     const cur = holdingsRef.current;
-    if (!cur.length) return;
+    const watch = watchlistRef.current;
+    if (!cur.length && !watch.length) return;
     setRefreshing(true);
     try {
-      const symbols = cur.map((h:any) => h.asset.ticker);
+      const holdingSymbols = cur.map((h:any) => h.asset.ticker);
+      const watchSymbols = watch.map((w:any) => w.symbol);
+      const symbols = Array.from(new Set([...holdingSymbols, ...watchSymbols]));
       const data    = await batchRefresh(symbols);
       const bySymbol = Object.fromEntries(data.map((d:any)=>[d.symbol,d]));
-      setHoldings(prev => prev.map(h => {
-        const live = bySymbol[h.asset.ticker];
-        if (!live) return h;
-        const newAsset = {...h.asset,
-          price:        live.price ?? h.asset.price,
-          dayChangePct: live.dayChangePct ?? h.asset.dayChangePct,
-          ytd:          live.ytd ?? h.asset.ytd,
-          vol:          live.vol ?? h.asset.vol,
-        };
-        return {...h, asset:newAsset, value: h.qty * (live.price ?? h.asset.price)};
-      }));
+      if (cur.length) {
+        setHoldings(prev => prev.map(h => {
+          const live = bySymbol[h.asset.ticker];
+          if (!live) return h;
+          const newAsset = {...h.asset,
+            price:        live.price ?? h.asset.price,
+            dayChangePct: live.dayChangePct ?? h.asset.dayChangePct,
+            ytd:          live.ytd ?? h.asset.ytd,
+            vol:          live.vol ?? h.asset.vol,
+          };
+          return {...h, asset:newAsset, value: h.qty * (live.price ?? h.asset.price)};
+        }));
+      }
+      // Price alerts — fire a browser Notification once per crossing, this session only.
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        watch.forEach((w:any) => {
+          if (w.target_price == null || !w.direction) return;
+          const live = bySymbol[w.symbol];
+          if (!live || live.price == null) return;
+          const crossed = w.direction === "above" ? live.price >= w.target_price : live.price <= w.target_price;
+          if (crossed && !notifiedRef.current.has(w.id)) {
+            notifiedRef.current.add(w.id);
+            try {
+              new Notification(`${w.symbol} price alert`, {
+                body: `${w.symbol} is now ${live.price.toFixed(2)} (target: ${w.direction} ${w.target_price})`,
+              });
+            } catch {}
+          }
+        });
+      }
     } catch(e:any) {
       console.error("Refresh failed:", e.message);
     } finally { setRefreshing(false); }
   }, []);
 
   // Single interval that does NOT reset on every price tick — only when
-  // crossing the empty/non-empty boundary of holdings.
+  // crossing the empty/non-empty boundary of holdings or watch-alerts.
   const hasHoldings = holdings.length > 0;
+  const hasWatchAlerts = watchlist.some((w:any) => w.target_price != null);
   useEffect(() => {
-    if (!hasHoldings) return;
+    if (!hasHoldings && !hasWatchAlerts) return;
     const t = setInterval(refreshPrices, 60000);
     return () => clearInterval(t);
-  }, [hasHoldings, refreshPrices]);
+  }, [hasHoldings, hasWatchAlerts, refreshPrices]);
+
+  // ── MULTI-CURRENCY DISPLAY LAYER ────────────────────────────────────────
+  // Holdings' `value`/`costBasis`/`costPrice` are stored in each asset's
+  // native currency. FX rates convert them to a single base (USD) for
+  // display/aggregation only — `holdings` itself (canonical state, lot math,
+  // persistence) always stays in native currency.
+  const BASE_CCY = "USD";
+  const foreignCurrencies = useMemo(() => Array.from(new Set(
+    holdings.map((h:any) => h.asset.currency).filter((c:string) => c && c !== BASE_CCY)
+  )), [holdings]);
+  const [fxRates, setFxRates] = useState<Record<string,number>>({});
+  useEffect(() => {
+    if (!foreignCurrencies.length) return;
+    let alive = true;
+    srvFx({ data: { base: BASE_CCY, currencies: foreignCurrencies } })
+      .then((r:any) => { if (alive) setFxRates(r?.rates || {}); })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foreignCurrencies.join("|")]);
+
+  const displayHoldings = useMemo(() => {
+    if (!foreignCurrencies.length) return holdings;
+    return holdings.map((h:any) => {
+      const rate = fxRates[h.asset.currency] ?? (h.asset.currency === BASE_CCY ? 1 : null);
+      if (rate == null || rate === 1) return h;
+      return { ...h, value: h.value*rate, costBasis: h.costBasis*rate, costPrice: h.costPrice*rate };
+    });
+  }, [holdings, fxRates, foreignCurrencies]);
 
   const [showDisclaimerModal, setShowDisclaimerModal] = useState(false);
   useEffect(() => {
@@ -2004,11 +2527,11 @@ export default function PortfolioTerminal() {
         <>
           <TopBar time={time}/>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-            {page==="home"       && <HomePage     holdings={holdings} setPage={setPage} onRefresh={refreshPrices} refreshing={refreshing}/>}
-            {page==="search"     && <SearchPage   onAdd={addToPortfolio} portfolio={holdings}/>}
-            {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio} onUpdate={updateHolding} onLoadPortfolio={setHoldings} onAddCash={addToPortfolio}/>}
-            {page==="analysis"   && <AnalysisPage  holdings={holdings} setPage={setPage}/>}
-            {page==="ai"         && <AIAdvisorPage holdings={holdings}/>}
+            {page==="home"       && <HomePage     holdings={displayHoldings} transactions={transactions} setPage={setPage} onRefresh={refreshPrices} refreshing={refreshing}/>}
+            {page==="search"     && <SearchPage   onAdd={addToPortfolio} portfolio={displayHoldings} onWatchlistChange={loadWatchlist}/>}
+            {page==="portfolio"  && <PortfolioPage holdings={holdings} onRemove={removeFromPortfolio} onUpdate={updateHolding} onSell={sellFromPortfolio} onLoadPortfolio={setHoldings} onAddCash={addToPortfolio}/>}
+            {page==="analysis"   && <AnalysisPage  holdings={displayHoldings} setPage={setPage}/>}
+            {page==="ai"         && <AIAdvisorPage holdings={displayHoldings}/>}
             {page==="news"       && <NewsPage holdings={holdings} setPage={setPage}/>}
           </div>
           <DisclaimerBar/>
